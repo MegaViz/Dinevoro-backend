@@ -12,7 +12,6 @@ import { withCors, corsPreflight } from "@/lib/cors";
 import { authCookieOptions } from "@/lib/auth-cookie";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
 import { ensureDemoAccount } from "@/lib/ensure-demo-account";
-import { SUPER_ADMIN_EMAIL } from "@/lib/super-admin";
 import { z } from "zod";
 import dayjs from "dayjs";
 const loginSchema = z.object({
@@ -42,13 +41,6 @@ export async function POST(request: Request) {
     const email = parsed.data.email.toLowerCase();
     const { password } = parsed.data;
     await connectToDatabase();
-
-    if (email === SUPER_ADMIN_EMAIL.toLowerCase()) {
-      return withCors(
-        request,
-        jsonResponse({ error: "Use the Admin login at /admin/login" }, 403),
-      );
-    }
 
     const user = (await User.findOne({ email })) as UserDoc | null;
     if (user) {

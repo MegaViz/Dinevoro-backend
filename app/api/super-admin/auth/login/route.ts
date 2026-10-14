@@ -6,9 +6,9 @@ import { signToken, JWT_COOKIE_NAME } from "@/lib/jwt";
 import { authCookieOptions } from "@/lib/auth-cookie";
 import { serializeUser } from "@/lib/serialize";
 import {
-  ensureSuperAdminUser,
   ensurePlatformData,
-  SUPER_ADMIN_EMAIL,
+  findSuperAdminByEmail,
+  countSuperAdmins,
 } from "@/lib/super-admin";
 
 const loginSchema = z.object({
@@ -32,10 +32,24 @@ export async function POST(request: Request) {
     }
 
     await ensurePlatformData();
-    const user = await ensureSuperAdminUser();
+
+    const setupCount = await countSuperAdmins();
+    if (setupCount === 0) {
+      return withCors(
+        request,
+        jsonResponse(
+          {
+            error: "No Super Admin yet. Create the first admin account to continue.",
+            code: "SETUP_REQUIRED",
+          },
+          403,
+        ),
+      );
+    }
 
     const email = parsed.data.email.toLowerCase();
-    if (email !== SUPER_ADMIN_EMAIL.toLowerCase() && email !== user.email.toLowerCase()) {
+    const user = await findSuperAdminByEmail(email);
+    if (!user) {
       return withCors(request, jsonResponse({ error: "Invalid super admin credentials" }, 401));
     }
 

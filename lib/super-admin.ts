@@ -24,9 +24,6 @@ export const ALL_MODULES = [
   "Website Orders",
 ] as const;
 
-export const SUPER_ADMIN_EMAIL = "admin@dinevoro.com";
-export const SUPER_ADMIN_PASSWORD = "SuperAdmin@123";
-
 export type PlatformPlanName = "Basic" | "Classic" | "Advanced";
 export type TenantStatus = "Active" | "Trial" | "Inactive";
 
@@ -153,24 +150,46 @@ export function forbidden(request: Request) {
   return withCors(request, jsonResponse({ error: "Super admin access required" }, 403));
 }
 
-export async function ensureSuperAdminUser() {
+export async function countSuperAdmins() {
   await connectToDatabase();
-  const passwordHash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
+  return User.countDocuments({ role: "SuperAdmin" });
+}
 
-  const user = (await User.findOneAndUpdate(
-    { email: SUPER_ADMIN_EMAIL },
-    {
-      $set: {
-        fullName: "Super Admin",
-        email: SUPER_ADMIN_EMAIL,
-        passwordHash,
-        role: "SuperAdmin",
-      },
-      $unset: { restaurant: 1 },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  )) as UserDoc;
+export async function findSuperAdminByEmail(email: string) {
+  await connectToDatabase();
+  return (await User.findOne({
+    email: email.trim().toLowerCase(),
+    role: "SuperAdmin",
+  })) as UserDoc | null;
+}
 
+/** Create the first Super Admin only when none exist yet. */
+export async function registerFirstSuperAdmin(input: {
+  fullName: string;
+  email: string;
+  password: string;
+}) {
+  await connectToDatabase();
+  const existingCount = await User.countDocuments({ role: "SuperAdmin" });
+  if (existingCount > 0) {
+    throw new Error("SUPER_ADMIN_EXISTS");
+  }
+
+  const email = input.email.trim().toLowerCase();
+  const taken = (await User.findOne({ email })) as UserDoc | null;
+  if (taken) {
+    throw new Error("EMAIL_TAKEN");
+  }
+
+  const passwordHash = await bcrypt.hash(input.password, 10);
+  const user = (await User.create({
+    fullName: input.fullName.trim(),
+    email,
+    passwordHash,
+    role: "SuperAdmin",
+  })) as unknown as UserDoc;
+
+  await User.findByIdAndUpdate(user._id, { $unset: { restaurant: 1 } });
   return user;
 }
 
@@ -330,7 +349,6 @@ const SAMPLE_TENANTS = [
 
 export async function ensurePlatformData() {
   await connectToDatabase();
-  await ensureSuperAdminUser();
 
   for (const plan of DEFAULT_PLANS) {
     await PlatformPlan.findOneAndUpdate({ slug: plan.slug }, plan, { upsert: true, new: true });

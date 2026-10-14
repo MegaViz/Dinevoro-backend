@@ -57,6 +57,8 @@ import * as saSupportId from "@/app/api/super-admin/support/[id]/route";
 import * as saSettings from "@/app/api/super-admin/settings/route";
 import * as saPassword from "@/app/api/super-admin/settings/password/route";
 import * as saLogin from "@/app/api/super-admin/auth/login/route";
+import * as saRegister from "@/app/api/super-admin/auth/register/route";
+import * as saSetup from "@/app/api/super-admin/auth/setup/route";
 import * as saLeads from "@/app/api/super-admin/leads/route";
 import * as saLeadId from "@/app/api/super-admin/leads/[id]/route";
 import * as saRoles from "@/app/api/super-admin/team/roles/route";
@@ -266,6 +268,10 @@ mountRoute(app, "post", "/api/attendance", attendance.POST);
 mountRoute(app, "options", "/api/attendance/:id", attendanceId.OPTIONS);
 mountRoute(app, "patch", "/api/attendance/:id", attendanceId.PATCH, true);
 
+mountRoute(app, "options", "/api/super-admin/auth/setup", saSetup.OPTIONS);
+mountRoute(app, "get", "/api/super-admin/auth/setup", saSetup.GET);
+mountRoute(app, "options", "/api/super-admin/auth/register", saRegister.OPTIONS);
+mountRoute(app, "post", "/api/super-admin/auth/register", saRegister.POST);
 mountRoute(app, "options", "/api/super-admin/auth/login", saLogin.OPTIONS);
 mountRoute(app, "post", "/api/super-admin/auth/login", saLogin.POST);
 

@@ -79,9 +79,18 @@ export async function POST(request: Request) {
         }
 
         if (remainingDays <= 4) {
-          subscriptionWarning = `Your subscription will end in ${remainingDays} ${
+          return withCors(request,
+            jsonResponse(
+              {
+                error:`Your subscription will end in ${remainingDays} ${
             remainingDays === 1 ? "day" : "days"
-          }. Please renew your plan.`;
+          }. Please renew your plan.`,
+                code: "Please renew your plan",
+                subscriptionEndsAt: user.subscriptionEndsAt,
+              },
+              403,
+            ),
+          );
         }
       }
 

@@ -6,7 +6,7 @@ Express + MongoDB API for Dinevoro.
 
 ```bash
 cp .env.example .env.local
-# fill MONGODB_URI, JWT_SECRET, FRONTEND_URL
+# set MONGODB_URI, JWT_SECRET, FRONTEND_URL
 npm install
 npm run dev
 ```
@@ -18,10 +18,7 @@ npm run build
 npm start
 ```
 
-Deploy on Render. Set `MONGODB_URI`, `JWT_SECRET`, and `FRONTEND_URL` in the service env.
-
-Health: `GET /api/health`  
-DB health: `GET /api/health/db`
+Live: https://dinevoro-backend.onrender.com
 
 ## Related
 

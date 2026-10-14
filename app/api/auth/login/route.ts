@@ -22,7 +22,6 @@ const loginSchema = z.object({
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
 }
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -42,6 +41,13 @@ export async function POST(request: Request) {
     const { password } = parsed.data;
     await connectToDatabase();
 
+    if (email === "admin@dinevoro.com".toLowerCase()) {
+      return withCors(
+        request,
+        jsonResponse({ error: "Use the Admin login at /admin/login" }, 403),
+      );
+    }
+
     const user = (await User.findOne({ email })) as UserDoc | null;
     if (user) {
       if (user.role === "SuperAdmin") {
@@ -60,11 +66,10 @@ export async function POST(request: Request) {
       }
       if (user.role === "Owner" && user.subscriptionEndsAt) {
         const now = dayjs();
-        // Access is valid through the end of the subscription calendar day.
-        const expiryEnd = dayjs(user.subscriptionEndsAt).endOf("day");
-        const remainingDays = Math.max(0, Math.ceil(expiryEnd.diff(now, "day", true)));
+        const expiryDate = dayjs(user.subscriptionEndsAt);
+        const remainingDays = Math.ceil(expiryDate.diff(now, "day", true));
 
-        if (now.isAfter(expiryEnd)) {
+        if (!expiryDate.isAfter(now)) {
           return withCors(
             request,
             jsonResponse(
@@ -105,7 +110,6 @@ export async function POST(request: Request) {
           {
             user: serializeUser(user),
             restaurant: serializeRestaurant(restaurant),
-            subscriptionWarning,
           },
           200,
           [
@@ -147,22 +151,11 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     console.error("Login error:", err);
-    const message = err instanceof Error ? err.message : "";
-    const dbBlocked =
-      message.includes("whitelist") ||
-      message.includes("ServerSelectionError") ||
-      message.includes("Could not connect to any servers");
     return withCors(
       request,
-      jsonResponse(
-        {
-          error: dbBlocked
-            ? "Database unavailable. Allow Render IPs in MongoDB Atlas Network Access (0.0.0.0/0), then retry."
-            : "Something went wrong. Please try again.",
-          code: dbBlocked ? "DB_UNAVAILABLE" : "LOGIN_FAILED",
-        },
-        500,
-      ),
+      jsonResponse({ error: "Something went wrong. Please try again." }, 500),
     );
   }
 }
+
+  

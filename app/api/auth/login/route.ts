@@ -26,6 +26,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const parsed = loginSchema.safeParse(body);
+    let remainingDays:any
     let subscriptionWarning: string | null = null;
     if (!parsed.success) {
       return withCors(
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       if (user.role === "Owner" && user.subscriptionEndsAt) {
         const now = dayjs();
         const expiryDate = dayjs(user.subscriptionEndsAt);
-        const remainingDays = Math.ceil(expiryDate.diff(now, "day", true));
+        remainingDays = Math.ceil(expiryDate.diff(now, "day", true));
 
         if (!expiryDate.isAfter(now)) {
           return withCors(
@@ -79,21 +80,7 @@ export async function POST(request: Request) {
           );
         }
 
-        if (remainingDays <= 4) {
-           return withCors(
-            request,
-            jsonResponse(
-              {
-                error: `Your subscription will end in ${remainingDays} ${
-            remainingDays === 1 ? "day" : "days"
-          }. Please renew your plan.`,
-                code: "Please renew your plan.",
-                subscriptionEndsAt: user.subscriptionEndsAt,
-              },
-              403,
-            ),
-          );
-        }
+       
       }
 
       const restaurant = (await Restaurant.findById(
@@ -110,12 +97,20 @@ export async function POST(request: Request) {
         userId: user._id.toString(),
         restaurantId: restaurant._id.toString(),
       });
+      const message =remainingDays <= 4
+    ? `Your subscription will end in ${remainingDays} ${
+        remainingDays === 1 ? "day" : "days"
+      }. Please renew your plan.`
+    : null;
+
       return withCors(
         request,
         jsonResponse(
           {
             user: serializeUser(user),
             restaurant: serializeRestaurant(restaurant),
+            subscriptionEndsAt: user.subscriptionEndsAt,
+            
           },
           200,
           [

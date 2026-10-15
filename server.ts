@@ -74,6 +74,7 @@ const DEFAULT_FRONTEND_ORIGINS = [
   "https://www.dinevoro.com",
   "https://dinevoro.vercel.app",
   "https://hotel-management-six-lime.vercel.app",
+  
 ];
 const allowedOrigins = [
   ...new Set(

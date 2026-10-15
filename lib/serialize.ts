@@ -7,6 +7,7 @@ export function serializeUser(user: UserDoc) {
     fullName: user.fullName,
     email: user.email,
     role: user.role,
+    subscriptionEndsAt:user.subscriptionEndsAt
   };
 }
 
@@ -38,5 +39,6 @@ export function serializeRestaurant(restaurant: RestaurantDoc) {
     invoiceTerms: restaurant.invoiceTerms,
     showLogoOnInvoice: restaurant.showLogoOnInvoice,
     digitalSignature: restaurant.digitalSignature,
+    
   };
 }

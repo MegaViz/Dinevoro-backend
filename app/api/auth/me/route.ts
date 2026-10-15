@@ -5,6 +5,7 @@ import Restaurant, { type RestaurantDoc } from "@/models/Restaurant";
 import { verifyToken, JWT_COOKIE_NAME } from "@/lib/jwt";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
+import dayjs from "dayjs";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -13,6 +14,8 @@ export async function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   try {
     const cookieHeader = request.headers.get("cookie") ?? "";
+    let subscriptionWarning: string | null = null;
+
     const token = cookieHeader
       .split(";")
       .map((c) => c.trim())
@@ -33,6 +36,22 @@ export async function GET(request: Request) {
     if (!user) {
       return withCors(request, jsonResponse({ error: "Not authenticated" }, 401));
     }
+    if (user.role === "Owner" && user.subscriptionEndsAt) {
+  const now = dayjs();
+  const expiryDate = dayjs(user.subscriptionEndsAt);
+
+  if (expiryDate.isAfter(now)) {
+    const remainingDays = Math.ceil(
+      expiryDate.diff(now, "day", true),
+    );
+
+    if (remainingDays <= 4) {
+      subscriptionWarning = `Your subscription will end in ${remainingDays} ${
+        remainingDays === 1 ? "day" : "days"
+      }. Please renew your plan.`;
+    }
+  }
+}
 
     const restaurant = (await Restaurant.findById(user.restaurant)) as RestaurantDoc | null;
 
@@ -41,6 +60,7 @@ export async function GET(request: Request) {
       jsonResponse({
         user: serializeUser(user),
         restaurant: restaurant ? serializeRestaurant(restaurant) : null,
+           subscriptionWarning,
       }),
     );
   } catch (err) {

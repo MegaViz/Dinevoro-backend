@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const parsed = loginSchema.safeParse(body);
-    let remainingDays:any
+  let remainingDays: number | null = null;
     let subscriptionWarning: string | null = null;
     if (!parsed.success) {
       return withCors(
@@ -79,7 +79,11 @@ export async function POST(request: Request) {
             ),
           );
         }
-
+       if (remainingDays <= 4) {
+  subscriptionWarning = `Your subscription will end in ${remainingDays} ${
+    remainingDays === 1 ? "day" : "days"
+  }. Please renew your plan.`;
+}
        
       }
 
@@ -97,11 +101,7 @@ export async function POST(request: Request) {
         userId: user._id.toString(),
         restaurantId: restaurant._id.toString(),
       });
-      const message =remainingDays <= 4
-    ? `Your subscription will end in ${remainingDays} ${
-        remainingDays === 1 ? "day" : "days"
-      }. Please renew your plan.`
-    : null;
+
 
       return withCors(
         request,
@@ -110,6 +110,7 @@ export async function POST(request: Request) {
             user: serializeUser(user),
             restaurant: serializeRestaurant(restaurant),
             subscriptionEndsAt: user.subscriptionEndsAt,
+           subscriptionWarning,
             
           },
           200,

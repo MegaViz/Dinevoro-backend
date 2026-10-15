@@ -1,7 +1,7 @@
 import "@/lib/env";
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://megaviztech_db_user:oDawSI4nZwAvALPz@dineovordev.dbdehkw.mongodb.net/?appName=DineovorDev";
 if (!MONGODB_URI) {
   throw new Error("Missing MONGODB_URI environment variable");
 }
@@ -25,7 +25,6 @@ function resetCache() {
 }
 
 export async function connectToDatabase() {
-  // Drop a dead connection so cold starts / Atlas blips can recover without a full redeploy.
   if (cache.conn && mongoose.connection.readyState === 1) {
     return cache.conn;
   }

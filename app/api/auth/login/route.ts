@@ -166,7 +166,7 @@ export async function POST(request: Request) {
       jsonResponse(
         {
           error: dbBlocked
-            ? "Database unavailable. Allow Render IPs in MongoDB Atlas Network Access (0.0.0.0/0), then retry."
+            ? "Database connection failed: Database server is unreachable."
             : "Something went wrong. Please try again.",
           code: dbBlocked ? "DB_UNAVAILABLE" : "LOGIN_FAILED",
         },

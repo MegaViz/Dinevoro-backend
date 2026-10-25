@@ -98,7 +98,8 @@ app.use(
   }),
 );
 app.use(cookieParser());
-app.use(express.json());
+// Receipts and logos are sent as data URLs, so allow bodies larger than the 100kb default.
+app.use(express.json({ limit: "5mb" }));
 
 app.get("/", (_req, res) => {
   res.type("html").send("<h1>HotelLite API</h1><p>Backend is running.</p>");

@@ -1,5 +1,24 @@
 import { z } from "zod";
 
+/** Currency amount in rupees with at most 2 decimal places (paise), stored rounded to paise. */
+function money(label: string) {
+  return z.coerce
+    .number({ error: `${label} must be a number` })
+    .refine((v) => Number.isFinite(v) && Math.abs(Math.round(v * 100) - v * 100) < 1e-6, {
+      message: `${label} can have at most 2 decimal places`,
+    })
+    .transform((v) => Math.round(v * 100) / 100);
+}
+
+/** Quantity that may be fractional (e.g. 2.5 kg), up to 3 decimal places. */
+function quantity(label: string) {
+  return z.coerce
+    .number({ error: `${label} must be a number` })
+    .refine((v) => Number.isFinite(v) && Math.abs(Math.round(v * 1000) - v * 1000) < 1e-6, {
+      message: `${label} can have at most 3 decimal places`,
+    });
+}
+
 export const registerSchema = z.object({
   fullName: z.string().trim().min(2, "Full name is too short"),
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
@@ -67,6 +86,8 @@ export const orderSchema = z.object({
 
 export const orderUpdateSchema = z.object({
   status: z.enum(["Paid", "Pending", "Refunded"]).optional(),
+  /** Amount received now. Omit to collect the full outstanding balance. */
+  amount: money("Amount").refine((v) => v > 0, { message: "Amount must be greater than 0" }).optional(),
   kitchenStatus: z.enum(["New", "Preparing", "Ready", "Served"]).optional(),
   mode: z.enum(["Cash", "UPI", "Card"]).optional(),
   channelStatus: z.string().trim().optional(),
@@ -108,17 +129,17 @@ export const tableUpdateSchema = z.object({
 
 export const stockEntrySchema = z.object({
   item: z.string().trim().min(1, "Select an item"),
-  quantity: z.coerce.number().positive("Quantity must be greater than 0"),
+  quantity: quantity("Quantity").refine((v) => v > 0, { message: "Quantity must be greater than 0" }),
   unit: z.string().trim().min(1, "Unit is required"),
   supplier: z.string().trim().optional().default(""),
-  cost: z.coerce.number().min(0).default(0),
+  cost: money("Purchase cost").refine((v) => v >= 0, { message: "Purchase cost cannot be negative" }).default(0),
 });
 
 export const inventoryUpdateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   unit: z.string().trim().min(1).optional(),
-  quantity: z.coerce.number().min(0).optional(),
-  reorderLevel: z.coerce.number().min(0).optional(),
+  quantity: quantity("Quantity").refine((v) => v >= 0, { message: "Quantity cannot be negative" }).optional(),
+  reorderLevel: quantity("Reorder level").refine((v) => v >= 0, { message: "Reorder level cannot be negative" }).optional(),
 });
 
 export const accountingActionSchema = z.object({
@@ -137,7 +158,7 @@ export const expenseSchema = z.object({
   paymentMode: z.enum(["Cash", "UPI", "Card", "Online", "Bank Transfer"]).default("Cash"),
   hasBill: z.coerce.boolean().default(false),
   billUrl: z.string().trim().optional().default(""),
-  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  amount: money("Amount").refine((v) => v > 0, { message: "Amount must be greater than 0" }),
   createdAt: z.string().trim().optional(),
 });
 
@@ -178,7 +199,7 @@ export const loyaltyRedeemSchema = z.object({
 const recipeIngredientSchema = z.object({
   name: z.string().trim().min(1, "Ingredient name is required"),
   qty: z.string().trim().min(1, "Quantity is required"),
-  cost: z.coerce.number().min(0, "Cost must be positive"),
+  cost: money("Ingredient cost").refine((v) => v >= 0, { message: "Cost must be positive" }),
 });
 
 export const recipeSchema = z.object({
@@ -194,7 +215,16 @@ export const recipeUpdateSchema = recipeSchema.partial();
 export const staffSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   role: z.string().trim().min(1, "Role is required"),
-  phone: z.string().trim().optional().default(""),
+  // Same mobile rule as customers; phone stays optional for staff.
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .default("")
+    .transform(normalizeIndianMobile)
+    .refine((v) => v === "" || /^[6-9]\d{9}$/.test(v), {
+      message: "Enter a valid 10-digit mobile number",
+    }),
   shift: z.enum(["Morning", "Evening"]).default("Morning"),
 });
 

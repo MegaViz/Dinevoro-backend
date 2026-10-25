@@ -7,6 +7,9 @@ const attendanceDaySchema = new Schema(
     present: { type: Number, default: 0 },
     late: { type: Number, default: 0 },
     absent: { type: Number, default: 0 },
+    offDuty: { type: Number, default: 0 },
+    /** Seeded sample rows; replaced by the live summary once real attendance is recorded for that date. */
+    demo: { type: Boolean, default: false },
     attendancePct: { type: Number, default: 0 },
   },
   { timestamps: true },

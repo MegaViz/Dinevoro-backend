@@ -7,6 +7,7 @@ import Expense from "@/models/Expense";
 import Staff from "@/models/Staff";
 import AttendanceDay from "@/models/AttendanceDay";
 import Notification from "@/models/Notification";
+import { startOfDay, daysAgo } from "@/lib/dates";
 
 function seedDaysAgo(days: number) {
   const d = new Date();
@@ -135,12 +136,12 @@ const DEFAULT_STAFF = [
   { name: "Kavya Nair", role: "Hostess", phone: "9876500006", shift: "Evening" as const, status: "Off Duty" as const, checkIn: "" },
 ];
 
-const DEFAULT_ATTENDANCE_HISTORY = [
-  { date: seedDaysAgo(0), present: 4, late: 1, absent: 1, attendancePct: 83 },
-  { date: seedDaysAgo(1), present: 5, late: 1, absent: 0, attendancePct: 100 },
-  { date: seedDaysAgo(2), present: 4, late: 0, absent: 2, attendancePct: 67 },
-  { date: seedDaysAgo(3), present: 6, late: 0, absent: 0, attendancePct: 100 },
-  { date: seedDaysAgo(4), present: 3, late: 1, absent: 2, attendancePct: 67 },
+// Past days only, stored at the local start of day like live rows; today's row comes from live staff records.
+const DEFAULT_ATTENDANCE_HISTORY = () => [
+  { date: startOfDay(daysAgo(1)), present: 3, late: 1, absent: 0, offDuty: 2, attendancePct: 100, demo: true },
+  { date: startOfDay(daysAgo(2)), present: 2, late: 0, absent: 2, offDuty: 2, attendancePct: 50, demo: true },
+  { date: startOfDay(daysAgo(3)), present: 4, late: 0, absent: 0, offDuty: 2, attendancePct: 100, demo: true },
+  { date: startOfDay(daysAgo(4)), present: 2, late: 1, absent: 1, offDuty: 2, attendancePct: 75, demo: true },
 ];
 
 const DEFAULT_NOTIFICATIONS = [
@@ -158,15 +159,15 @@ export async function seedDefaultStaff(restaurantId: string) {
 
   const histCount = await AttendanceDay.countDocuments({ restaurant: restaurantId });
   if (histCount === 0) {
-    await AttendanceDay.insertMany(DEFAULT_ATTENDANCE_HISTORY.map((h) => ({ ...h, restaurant: restaurantId })));
+    await AttendanceDay.insertMany(DEFAULT_ATTENDANCE_HISTORY().map((h) => ({ ...h, restaurant: restaurantId })));
     return;
   }
 
   const weekAgo = seedDaysAgo(7);
   const recentHist = await AttendanceDay.countDocuments({ restaurant: restaurantId, date: { $gte: weekAgo } });
-  if (recentHist === 0 && histCount <= DEFAULT_ATTENDANCE_HISTORY.length) {
+  if (recentHist === 0 && histCount <= DEFAULT_ATTENDANCE_HISTORY().length) {
     await AttendanceDay.deleteMany({ restaurant: restaurantId });
-    await AttendanceDay.insertMany(DEFAULT_ATTENDANCE_HISTORY.map((h) => ({ ...h, restaurant: restaurantId })));
+    await AttendanceDay.insertMany(DEFAULT_ATTENDANCE_HISTORY().map((h) => ({ ...h, restaurant: restaurantId })));
   }
 }
 
@@ -182,7 +183,8 @@ export async function seedDefaultNotifications(restaurantId: string) {
 export async function seedDefaultExpenses(restaurantId: string) {
   const insertDemo = () =>
     Expense.insertMany(
-      DEFAULT_EXPENSES.map((e) => ({ ...e, restaurant: restaurantId, billUrl: e.hasBill ? "attached" : "" })),
+      // Sample expenses have no receipt file, so they are not marked as attached.
+      DEFAULT_EXPENSES.map((e) => ({ ...e, restaurant: restaurantId, hasBill: false, billUrl: "" })),
       { timestamps: false },
     );
 

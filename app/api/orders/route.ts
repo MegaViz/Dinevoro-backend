@@ -7,7 +7,8 @@ import Order from "@/models/Order";
 import Table from "@/models/Table";
 import { serializeOrder } from "@/lib/serialize-resources";
 import { notify } from "@/lib/notify";
-import { syncCustomerOnOrderPaid } from "@/lib/customer-stats";
+import { creditCustomerForOrder } from "@/lib/customer-stats";
+import { computeOrderTotals, getTaxSettings, nextInvoiceNumber } from "@/lib/billing";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -57,12 +58,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const subtotal = data.items.reduce((sum, line) => sum + line.price * line.qty, 0);
-    const gstAmount = data.items.reduce((sum, line) => sum + (line.price * line.qty * line.gst) / 100, 0);
-    const total = subtotal + gstAmount;
-
-    const latest = await Order.findOne({ restaurant: auth.restaurantId }).sort({ billNo: -1 });
-    const billNo = latest ? latest.billNo + 1 : 1001;
+    // Totals always come from the saved GST settings, never from the client.
+    const totals = computeOrderTotals(data.items, await getTaxSettings(auth.restaurantId));
+    const { billNo, invoiceNo } = await nextInvoiceNumber(auth.restaurantId);
+    const isPaid = data.status === "Paid";
 
     const customCreatedAt = data.createdAt ? new Date(data.createdAt) : undefined;
     const kitchenStatus = data.kitchenStatus ?? "New";
@@ -72,19 +71,23 @@ export async function POST(request: Request) {
         {
           restaurant: auth.restaurantId,
           billNo,
+          invoiceNo,
           table: tableId || undefined,
           tableOrNo,
           customerName: data.customerName || "Walk-in",
-          items: data.items.map((line) => ({
+          items: totals.items.map((line) => ({
             menuItem: line.menuItemId,
             name: line.name,
             price: line.price,
             gst: line.gst,
             qty: line.qty,
           })),
-          subtotal,
-          gstAmount,
-          total,
+          subtotal: totals.subtotal,
+          gstAmount: totals.gstAmount,
+          total: totals.total,
+          gstInclusive: totals.gstInclusive,
+          amountPaid: isPaid ? totals.total : 0,
+          payments: isPaid ? [{ amount: totals.total, mode: data.mode, paidAt: customCreatedAt && !isNaN(customCreatedAt.getTime()) ? customCreatedAt : new Date() }] : [],
           mode: data.mode,
           status: data.status,
           kitchenStatus,
@@ -111,14 +114,14 @@ export async function POST(request: Request) {
       await notify({
         restaurantId: auth.restaurantId,
         title: `Payment Pending: #${order.billNo}`,
-        message: `Bill #${order.billNo} for ${order.tableOrNo || order.customerName} (₹${order.total.toFixed(0)}) is awaiting payment.`,
+        message: `Bill #${order.billNo} for ${order.tableOrNo || order.customerName} (₹${order.total.toFixed(2)}) is awaiting payment.`,
         category: "Payments",
         severity: "warning",
       });
     }
 
     if (order.status === "Paid") {
-      await syncCustomerOnOrderPaid(auth.restaurantId, order.customerName, order.total, false);
+      await creditCustomerForOrder(order);
     }
 
     return withCors(request, jsonResponse({ order: serializeOrder(order) }, 201));

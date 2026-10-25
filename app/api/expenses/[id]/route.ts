@@ -4,7 +4,7 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { expenseUpdateSchema } from "@/lib/validation";
 import Expense from "@/models/Expense";
-import { serializeExpense } from "@/lib/serialize-resources";
+import { serializeExpense, hasRealAttachment } from "@/lib/serialize-resources";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -26,6 +26,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const update: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.createdAt) {
       update.createdAt = new Date(parsed.data.createdAt);
+    }
+    if (parsed.data.billUrl !== undefined) {
+      update.hasBill = hasRealAttachment(parsed.data.billUrl);
+      if (!update.hasBill) update.billUrl = "";
+    } else {
+      delete update.hasBill;
     }
 
     const expense = await Expense.findOneAndUpdate(

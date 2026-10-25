@@ -1,3 +1,5 @@
+import { amountReceived, balanceDue } from "@/lib/billing";
+import { localDateKey } from "@/lib/dates";
 import type { MenuItemDoc } from "@/models/MenuItem";
 import type { OrderDoc } from "@/models/Order";
 import type { InventoryItemDoc } from "@/models/InventoryItem";
@@ -42,6 +44,7 @@ export function serializeOrder(order: OrderDoc) {
   return {
     id: order._id.toString(),
     billNo: order.billNo,
+    invoiceNo: order.invoiceNo ?? "",
     tableId: order.table?.toString() ?? null,
     tableOrNo: order.tableOrNo,
     customerName: order.customerName,
@@ -49,6 +52,14 @@ export function serializeOrder(order: OrderDoc) {
     subtotal: order.subtotal,
     gstAmount: order.gstAmount,
     total: order.total,
+    gstInclusive: order.gstInclusive ?? false,
+    amountPaid: amountReceived(order),
+    balanceDue: balanceDue(order),
+    payments: (order.payments ?? []).map((p: { amount: number; mode: string; paidAt?: Date }) => ({
+      amount: p.amount,
+      mode: p.mode,
+      paidAt: p.paidAt ?? null,
+    })),
     mode: order.mode,
     status: order.status,
     kitchenStatus: order.kitchenStatus,
@@ -98,14 +109,20 @@ export function serializeStockEntry(entry: StockEntryDoc) {
   };
 }
 
+/** Only a stored file (data URL) or a real link counts as an attached receipt. Old demo rows used the placeholder "attached". */
+export function hasRealAttachment(url?: string | null) {
+  if (!url) return false;
+  return /^data:[\w.+-]+\/[\w.+-]+;base64,/.test(url) || /^https?:\/\//i.test(url);
+}
+
 export function serializeExpense(expense: ExpenseDoc) {
   return {
     id: expense._id.toString(),
     description: expense.description,
     category: expense.category,
     paymentMode: expense.paymentMode,
-    hasBill: expense.hasBill,
-    billUrl: expense.billUrl,
+    hasBill: hasRealAttachment(expense.billUrl),
+    billUrl: hasRealAttachment(expense.billUrl) ? expense.billUrl : "",
     amount: expense.amount,
     createdAt: expense.createdAt,
   };
@@ -162,9 +179,12 @@ export function serializeAttendanceDay(day: AttendanceDayDoc) {
   return {
     id: day._id.toString(),
     date: day.date,
+    /** Calendar date in the restaurant time zone (YYYY-MM-DD), independent of the viewer's time zone. */
+    day: localDateKey(new Date(day.date)),
     present: day.present,
     late: day.late,
     absent: day.absent,
+    offDuty: day.offDuty ?? 0,
     attendancePct: day.attendancePct,
   };
 }

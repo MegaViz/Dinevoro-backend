@@ -47,9 +47,21 @@ export async function POST(request: Request) {
     }
 
     await connectToDatabase();
+    const number = parsed.data.number;
+    // Table numbers are unique across every area of the restaurant (case-insensitive).
+    const duplicate = await Table.exists({
+      restaurant: auth.restaurantId,
+      number: { $regex: new RegExp(`^${number.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+    });
+    if (duplicate) {
+      return withCors(request, jsonResponse({ error: `Table number ${number} already exists` }, 409));
+    }
     const table = await Table.create({ ...parsed.data, restaurant: auth.restaurantId });
     return withCors(request, jsonResponse({ table: serializeTable(table) }, 201));
   } catch (err) {
+    if ((err as { code?: number })?.code === 11000) {
+      return withCors(request, jsonResponse({ error: "Table number already exists" }, 409));
+    }
     console.error("Create table error:", err);
     return withCors(request, jsonResponse({ error: "Something went wrong" }, 500));
   }

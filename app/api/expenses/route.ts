@@ -4,7 +4,7 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { expenseSchema } from "@/lib/validation";
 import Expense from "@/models/Expense";
-import { serializeExpense } from "@/lib/serialize-resources";
+import { serializeExpense, hasRealAttachment } from "@/lib/serialize-resources";
 import { seedDefaultExpenses } from "@/lib/seed-demo-data";
 
 export async function OPTIONS(request: Request) {
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       [
         {
           ...rest,
-          hasBill: rest.hasBill || !!rest.billUrl,
+          hasBill: hasRealAttachment(rest.billUrl),
+          billUrl: hasRealAttachment(rest.billUrl) ? rest.billUrl : "",
           restaurant: auth.restaurantId,
           ...(customCreatedAt && !isNaN(customCreatedAt.getTime()) ? { createdAt: customCreatedAt } : {}),
         },

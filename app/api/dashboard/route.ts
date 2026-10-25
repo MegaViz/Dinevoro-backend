@@ -2,7 +2,8 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
-import { startOfDay, endOfDay, daysAgo, DAY_LABELS } from "@/lib/dates";
+import { startOfDay, endOfDay, daysAgo, formatDate } from "@/lib/dates";
+import { amountReceived, roundMoney } from "@/lib/billing";
 import Order from "@/models/Order";
 import Expense from "@/models/Expense";
 import InventoryItem from "@/models/InventoryItem";
@@ -67,9 +68,9 @@ export async function GET(request: Request) {
     ]);
 
   const todayPaid = todayOrders.filter((o) => o.status === "Paid");
-  const yesterdayPaid = yesterdayOrders.filter((o) => o.status === "Paid");
-  const todayRevenue = todayPaid.reduce((sum, o) => sum + o.total, 0);
-  const yesterdayRevenue = yesterdayPaid.reduce((sum, o) => sum + o.total, 0);
+  // Revenue is money actually received, including part payments on bills that are still pending.
+  const todayRevenue = roundMoney(todayOrders.reduce((sum, o) => sum + amountReceived(o), 0));
+  const yesterdayRevenue = roundMoney(yesterdayOrders.reduce((sum, o) => sum + amountReceived(o), 0));
   const revenueChange =
     yesterdayRevenue > 0 ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100) : todayRevenue > 0 ? 100 : 0;
 
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
     const revenue = weekOrders
       .filter((o) => o.createdAt >= dayStart && o.createdAt <= dayEnd)
       .reduce((sum, o) => sum + o.total, 0);
-    return { day: DAY_LABELS[day.getDay()], revenue };
+    return { day: formatDate(day, { weekday: "short" }), revenue };
   });
 
   const stockItems = lowStockItems.map((item) => ({

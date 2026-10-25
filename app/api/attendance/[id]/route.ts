@@ -4,29 +4,8 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { staffUpdateSchema } from "@/lib/validation";
 import Staff from "@/models/Staff";
-import AttendanceDay from "@/models/AttendanceDay";
+import { syncAttendanceDay } from "@/lib/attendance";
 import { serializeStaff } from "@/lib/serialize-resources";
-
-function startOfDay(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-async function syncAttendanceDay(restaurantId: string) {
-  const staff = await Staff.find({ restaurant: restaurantId, active: true });
-  const present = staff.filter((s) => s.status === "Present").length;
-  const late = staff.filter((s) => s.status === "Late").length;
-  const absent = staff.filter((s) => s.status === "Absent" || s.status === "Off Duty").length;
-  const total = staff.length;
-  const attendancePct = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
-
-  await AttendanceDay.findOneAndUpdate(
-    { restaurant: restaurantId, date: startOfDay() },
-    { present, late, absent, attendancePct },
-    { upsert: true, new: true },
-  );
-}
 
 function formatTime(date: Date) {
   return date.toLocaleTimeString("en-IN", {

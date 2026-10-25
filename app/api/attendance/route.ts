@@ -4,17 +4,9 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { staffSchema } from "@/lib/validation";
 import Staff from "@/models/Staff";
-import AttendanceDay from "@/models/AttendanceDay";
+import { countAttendance, syncAttendanceDay, attendanceHistory } from "@/lib/attendance";
 import { serializeStaff, serializeAttendanceDay } from "@/lib/serialize-resources";
 import { seedDefaultStaff } from "@/lib/seed-demo-data";
-
-function buildSummary(staff: Awaited<ReturnType<typeof Staff.find>>) {
-  const morning = staff.filter((s) => s.shift === "Morning" || s.status !== "Off Duty");
-  const present = staff.filter((s) => s.status === "Present").length;
-  const late = staff.filter((s) => s.status === "Late").length;
-  const absent = staff.filter((s) => s.status === "Absent").length;
-  return { total: staff.length, present, late, absent, morningCount: morning.length };
-}
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -28,7 +20,9 @@ export async function GET(request: Request) {
   await seedDefaultStaff(auth.restaurantId);
 
   const staff = await Staff.find({ restaurant: auth.restaurantId, active: true }).sort({ name: 1 });
-  const history = await AttendanceDay.find({ restaurant: auth.restaurantId }).sort({ date: -1 }).limit(10);
+  // Today's history row is always rebuilt from the live staff records, so History matches Today.
+  await syncAttendanceDay(auth.restaurantId);
+  const history = await attendanceHistory(auth.restaurantId, 10);
 
   const weeklyTrend = history.slice(0, 5).reverse().map((d) => ({
     label: new Date(d.date).toLocaleDateString("en-US", { day: "numeric", month: "short" }),
@@ -44,11 +38,11 @@ export async function GET(request: Request) {
     request,
     jsonResponse({
       staff: staff.map(serializeStaff),
-      summary: buildSummary(staff),
+      summary: countAttendance(staff),
       history: history.map(serializeAttendanceDay),
       reportsSummary: {
         totalStaff: staff.length,
-        presentToday: presentCount(staff),
+        presentToday: countAttendance(staff).present + countAttendance(staff).late,
         presentDetail: `${staff.filter((s) => s.status === "Present").length} present · ${staff.filter((s) => s.status === "Late").length} late · ${staff.filter((s) => s.status === "Absent").length} absent`,
         avgAttendance,
         lateThisWeek,
@@ -56,10 +50,6 @@ export async function GET(request: Request) {
       weeklyTrend,
     }),
   );
-}
-
-function presentCount(staff: Awaited<ReturnType<typeof Staff.find>>) {
-  return staff.filter((s) => s.status === "Present" || s.status === "Late").length;
 }
 
 export async function POST(request: Request) {
@@ -80,6 +70,7 @@ export async function POST(request: Request) {
       status: parsed.data.shift === "Evening" ? "Off Duty" : "Absent",
     });
 
+    await syncAttendanceDay(auth.restaurantId);
     return withCors(request, jsonResponse({ staff: serializeStaff(staff) }, 201));
   } catch (err) {
     console.error("Create staff error:", err);

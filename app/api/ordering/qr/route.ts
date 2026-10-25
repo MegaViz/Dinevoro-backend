@@ -8,6 +8,7 @@ import Table from "@/models/Table";
 import { serializeOrder, serializeTable } from "@/lib/serialize-resources";
 import { seedDemoChannelOrders } from "@/lib/seed-channel-orders";
 import { seedDefaultTables } from "@/lib/seed-tables";
+import { computeOrderTotals, getTaxSettings, nextInvoiceNumber } from "@/lib/billing";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -51,22 +52,22 @@ export async function POST(request: Request) {
       if (table) tableOrNo = table.number;
     }
 
-    const subtotal = data.items.reduce((sum, line) => sum + line.price * line.qty, 0);
-    const gstAmount = data.items.reduce((sum, line) => sum + (line.price * line.qty * line.gst) / 100, 0);
-    const latest = await Order.findOne({ restaurant: auth.restaurantId }).sort({ billNo: -1 });
-    const billNo = latest ? latest.billNo + 1 : 1001;
+    const totals = computeOrderTotals(data.items, await getTaxSettings(auth.restaurantId));
+    const { billNo, invoiceNo } = await nextInvoiceNumber(auth.restaurantId);
     const qrCount = await Order.countDocuments({ restaurant: auth.restaurantId, channel: "QR" });
 
     const order = await Order.create({
       restaurant: auth.restaurantId,
       billNo,
+      invoiceNo,
       table: data.tableId,
       tableOrNo,
       customerName: data.customerName || "Table Guest",
-      items: data.items,
-      subtotal,
-      gstAmount,
-      total: subtotal + gstAmount,
+      items: totals.items,
+      subtotal: totals.subtotal,
+      gstAmount: totals.gstAmount,
+      total: totals.total,
+      gstInclusive: totals.gstInclusive,
       channel: "QR",
       channelStatus: "Pending",
       orderType: "Dine-in",

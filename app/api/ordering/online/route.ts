@@ -7,6 +7,7 @@ import Order from "@/models/Order";
 import DeliveryAgent from "@/models/DeliveryAgent";
 import { serializeOrder } from "@/lib/serialize-resources";
 import { seedDemoChannelOrders } from "@/lib/seed-channel-orders";
+import { computeOrderTotals, getTaxSettings, nextInvoiceNumber } from "@/lib/billing";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -52,22 +53,22 @@ export async function POST(request: Request) {
     const data = parsed.data;
     await connectToDatabase();
 
-    const subtotal = data.items.reduce((sum, line) => sum + line.price * line.qty, 0);
-    const gstAmount = data.items.reduce((sum, line) => sum + (line.price * line.qty * line.gst) / 100, 0);
-    const latest = await Order.findOne({ restaurant: auth.restaurantId }).sort({ billNo: -1 });
-    const billNo = latest ? latest.billNo + 1 : 1001;
+    const totals = computeOrderTotals(data.items, await getTaxSettings(auth.restaurantId));
+    const { billNo, invoiceNo } = await nextInvoiceNumber(auth.restaurantId);
     const prefix = data.channel === "Swiggy" ? "SM" : data.channel === "Zomato" ? "ZO" : "WB";
     const count = await Order.countDocuments({ restaurant: auth.restaurantId, channel: data.channel });
 
     const order = await Order.create({
       restaurant: auth.restaurantId,
       billNo,
+      invoiceNo,
       customerName: data.customerName || "Online Customer",
       deliveryAddress: data.deliveryAddress || "",
-      items: data.items,
-      subtotal,
-      gstAmount,
-      total: subtotal + gstAmount,
+      items: totals.items,
+      subtotal: totals.subtotal,
+      gstAmount: totals.gstAmount,
+      total: totals.total,
+      gstInclusive: totals.gstInclusive,
       channel: data.channel,
       channelStatus: data.channelStatus || "New",
       orderType: "Online",

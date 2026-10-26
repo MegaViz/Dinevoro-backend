@@ -115,6 +115,7 @@ export async function POST(request: Request) {
             user: serializeUser(user),
             restaurant: serializeRestaurant(restaurant),
             subscriptionWarning,
+            token,
           },
           200,
           [
@@ -141,7 +142,8 @@ export async function POST(request: Request) {
         {
           user: serializeUser(demo.user),
           restaurant: serializeRestaurant(demo.restaurant),
-          subscriptionWarning
+          subscriptionWarning,
+          token,
         },
         200,
         [

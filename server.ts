@@ -73,6 +73,7 @@ const DEFAULT_FRONTEND_ORIGINS = [
   "https://dinevoro.com",
   "https://www.dinevoro.com",
   "https://dinevoro.vercel.app",
+  "https://dinevoro-tau.vercel.app",
   "https://hotel-management-six-lime.vercel.app",
 ];
 const allowedOrigins = [

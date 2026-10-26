@@ -1,14 +1,9 @@
-import { verifyToken, JWT_COOKIE_NAME } from "@/lib/jwt";
+import { verifyToken, readAuthToken } from "@/lib/jwt";
 import { withCors } from "@/lib/cors";
 import { jsonResponse } from "@/lib/response";
 
 export function getAuthContext(request: Request) {
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const token = cookieHeader
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
-    ?.split("=")[1];
+  const token = readAuthToken(request);
 
   if (!token) return null;
 

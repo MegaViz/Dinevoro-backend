@@ -2,7 +2,7 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import User, { type UserDoc } from "@/models/User";
 import Restaurant, { type RestaurantDoc } from "@/models/Restaurant";
-import { verifyToken, JWT_COOKIE_NAME } from "@/lib/jwt";
+import { verifyToken, readAuthToken } from "@/lib/jwt";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
 
@@ -12,12 +12,7 @@ export async function OPTIONS(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const cookieHeader = request.headers.get("cookie") ?? "";
-    const token = cookieHeader
-      .split(";")
-      .map((c) => c.trim())
-      .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
-      ?.split("=")[1];
+    const token = readAuthToken(request);
 
     if (!token) {
       return withCors(request, jsonResponse({ error: "Not authenticated" }, 401));

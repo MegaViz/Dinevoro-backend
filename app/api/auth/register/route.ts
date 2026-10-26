@@ -94,6 +94,7 @@ export async function POST(request: Request) {
         {
           user: serializeUser(user),
           restaurant: serializeRestaurant(restaurant),
+          token,
         },
         200,
         [{ name: JWT_COOKIE_NAME, value: token, options: authCookieOptions(30 * 24 * 60 * 60) }],

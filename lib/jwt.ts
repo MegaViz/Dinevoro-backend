@@ -24,3 +24,21 @@ export function verifyToken(token: string): AuthTokenPayload | null {
     return null;
   }
 }
+
+/**
+ * Reads the session token from the `Authorization: Bearer` header, falling back to the auth cookie.
+ * The frontend calls the API on another domain, where browsers often drop the cookie, so the header comes first.
+ */
+export function readAuthToken(request: Request): string | null {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+  if (match?.[1]) return match[1].trim();
+
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const token = cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
+    ?.split("=")[1];
+  return token || null;
+}

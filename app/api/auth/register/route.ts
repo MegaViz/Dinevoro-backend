@@ -93,6 +93,7 @@ export async function POST(request: Request) {
       jsonResponse(
         {
           user: serializeUser(user),
+          token,
           restaurant: serializeRestaurant(restaurant),
         },
         200,

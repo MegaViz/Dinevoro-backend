@@ -24,3 +24,24 @@ export function verifyToken(token: string): AuthTokenPayload | null {
     return null;
   }
 }
+
+/**
+ * Session token from `Authorization: Bearer <token>` or the auth cookie.
+ * The bearer header keeps login working when browsers block cross-site cookies.
+ */
+export function getAuthToken(request: Request): string | null {
+  const header = request.headers.get("authorization") ?? "";
+  if (header.toLowerCase().startsWith("bearer ")) {
+    const token = header.slice(7).trim();
+    if (token) return token;
+  }
+
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  return (
+    cookieHeader
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
+      ?.split("=")[1] ?? null
+  );
+}

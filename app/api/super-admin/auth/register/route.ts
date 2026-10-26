@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         jsonResponse(
           {
             user: serializeUser(user),
+            token,
             restaurant: null,
           },
           201,

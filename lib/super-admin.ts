@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { connectToDatabase } from "@/lib/mongodb";
-import { verifyToken, JWT_COOKIE_NAME } from "@/lib/jwt";
+import { verifyToken, getAuthToken } from "@/lib/jwt";
 import { withCors } from "@/lib/cors";
 import { jsonResponse } from "@/lib/response";
 import User, { type UserDoc } from "@/models/User";
@@ -127,12 +127,7 @@ export function serializePlan(plan: PlatformPlanDoc, tenantCount: number) {
 }
 
 export async function getPlatformAdmin(request: Request) {
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const token = cookieHeader
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
-    ?.split("=")[1];
+  const token = getAuthToken(request);
 
   if (!token) return null;
   const payload = verifyToken(token);

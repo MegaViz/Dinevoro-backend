@@ -1,17 +1,11 @@
 export function authCookieOptions(maxAge: number) {
   const isProduction = process.env.NODE_ENV === "production";
-  const frontendUrl = process.env.FRONTEND_URL?.trim() ?? "";
-  const usesSameOriginProxy =
-    frontendUrl.includes("vercel.app") ||
-    frontendUrl.includes("netlify.app") ||
-    frontendUrl.includes("dinevoro.com") ||
-    frontendUrl.includes("hotel-management");
-  const sameSiteNone =
-    isProduction && frontendUrl.startsWith("http") && !usesSameOriginProxy;
 
+  // The frontend (Vercel) calls this API on another domain, so the cookie must be
+  // SameSite=None; Secure in production or browsers will not send it back.
   return {
     httpOnly: true,
-    sameSite: sameSiteNone ? ("none" as const) : ("lax" as const),
+    sameSite: isProduction ? ("none" as const) : ("lax" as const),
     secure: isProduction,
     path: "/",
     maxAge,

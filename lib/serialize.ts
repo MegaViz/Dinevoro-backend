@@ -1,5 +1,7 @@
 import type { UserDoc } from "@/models/User";
 import type { RestaurantDoc } from "@/models/Restaurant";
+import { loyaltyConfigOf } from "@/lib/customer-stats";
+import { toPlatformPlan } from "@/lib/super-admin";
 
 export function serializeUser(user: UserDoc) {
   return {
@@ -7,6 +9,7 @@ export function serializeUser(user: UserDoc) {
     fullName: user.fullName,
     email: user.email,
     role: user.role,
+    active: (user as { active?: boolean }).active ?? true,
   };
 }
 
@@ -18,7 +21,7 @@ export function serializeRestaurant(restaurant: RestaurantDoc) {
     city: restaurant.city,
     phone: restaurant.phone,
     gstin: restaurant.gstin,
-    plan: restaurant.plan,
+    plan: toPlatformPlan(restaurant.plan ?? undefined),
     billingCycle: restaurant.billingCycle,
     trialEndsAt: restaurant.trialEndsAt,
     ownerName: restaurant.ownerName,
@@ -38,5 +41,6 @@ export function serializeRestaurant(restaurant: RestaurantDoc) {
     invoiceTerms: restaurant.invoiceTerms,
     showLogoOnInvoice: restaurant.showLogoOnInvoice,
     digitalSignature: restaurant.digitalSignature,
+    loyalty: loyaltyConfigOf(restaurant as { loyalty?: Record<string, number> | null }),
   };
 }

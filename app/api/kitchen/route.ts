@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   const query: Record<string, unknown> = {
     restaurant: auth.restaurantId,
     kitchenStatus: { $ne: "Served" },
-    status: { $ne: "Refunded" },
+    status: { $nin: ["Refunded", "Void"] },
   };
   if (status && status !== "All") query.kitchenStatus = status;
 

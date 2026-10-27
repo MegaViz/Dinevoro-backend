@@ -5,22 +5,7 @@ import { withCors, corsPreflight } from "@/lib/cors";
 import { orderUpdateSchema } from "@/lib/validation";
 import Order from "@/models/Order";
 import DeliveryAgent from "@/models/DeliveryAgent";
-import { serializeOrder } from "@/lib/serialize-resources";
-
-async function serializeDeliveryOrder(order: NonNullable<Awaited<ReturnType<typeof Order.findOne>>>) {
-  const base = serializeOrder(order);
-  let agentName = "";
-  if (order.deliveryAgent) {
-    const agent = await DeliveryAgent.findById(order.deliveryAgent);
-    agentName = agent?.name ?? "";
-  }
-  let deliveryLabel = "Pending Assignment";
-  if (order.channelStatus === "OutForDelivery") deliveryLabel = "Out for Delivery";
-  else if (order.channelStatus === "Delivered") deliveryLabel = "Delivered";
-  else if (order.deliveryAgent) deliveryLabel = "Picked Up";
-
-  return { ...base, agentName, deliveryLabel, deliveryId: `DEL-${String(order.billNo).slice(-3)}` };
-}
+import { serializeDeliveryOrder, deliveryTransitionError } from "@/lib/delivery";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -39,13 +24,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
+    const existing = await Order.findOne({ _id: id, restaurant: auth.restaurantId });
+    if (!existing) {
+      return withCors(request, jsonResponse({ error: "Not found" }, 404));
+    }
+    const next = parsed.data.channelStatus;
+    const blocked = next ? deliveryTransitionError(existing, next) : null;
+    if (blocked) {
+      return withCors(request, jsonResponse({ error: blocked }, 409));
+    }
+
     const update: Record<string, unknown> = {};
 
     if (parsed.data.deliveryAgentId) {
-      update.deliveryAgent = parsed.data.deliveryAgentId;
-      update.channelStatus = "Preparing";
+      const agent = await DeliveryAgent.findOne({ _id: parsed.data.deliveryAgentId, restaurant: auth.restaurantId });
+      if (!agent) {
+        return withCors(request, jsonResponse({ error: "Delivery agent not found" }, 404));
+      }
+      update.deliveryAgent = agent._id;
+      if (!existing.channelStatus || existing.channelStatus === "Accepted") update.channelStatus = "Preparing";
       update.eta = parsed.data.eta ?? 25;
-      await DeliveryAgent.findByIdAndUpdate(parsed.data.deliveryAgentId, { $inc: { todayRuns: 1 } });
+      await DeliveryAgent.findByIdAndUpdate(agent._id, { $inc: { todayRuns: 1 } });
     }
     if (parsed.data.channelStatus === "OutForDelivery") {
       update.channelStatus = "OutForDelivery";
@@ -53,8 +52,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (parsed.data.channelStatus === "Delivered") {
       update.channelStatus = "Delivered";
-      update.status = "Paid";
       update.kitchenStatus = "Served";
+      // Online orders are collected on delivery.
+      if (existing.status === "Pending") {
+        update.status = "Paid";
+        update.amountPaid = existing.total;
+      }
     }
 
     const order = await Order.findOneAndUpdate(

@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   const rangeStart = months[months.length - 1].start;
 
   const [orders, expenses, settings, gst] = await Promise.all([
-    Order.find({ restaurant, status: { $ne: "Refunded" }, createdAt: { $gte: rangeStart } }).select("createdAt status total amountPaid"),
+    Order.find({ restaurant, status: { $nin: ["Refunded", "Void"] }, createdAt: { $gte: rangeStart } }).select("createdAt status total amountPaid refundAmount"),
     Expense.find({ restaurant, createdAt: { $gte: rangeStart } }).select("createdAt amount"),
     getOrCreateAccountingSettings(restaurant),
     buildGstPeriods(restaurant, 4, now),
@@ -86,6 +86,8 @@ export async function GET(request: Request) {
       icon: meta.icon,
       connected,
       status: connected ? ("Active" as const) : ("Inactive" as const),
+      // No live connector exists yet, so new connections cannot be made.
+      available: false,
       lastSyncAt: state?.lastSyncAt?.toISOString() ?? null,
     };
   });
@@ -141,34 +143,36 @@ export async function PATCH(request: Request) {
         category: "System",
         severity: "success",
       });
-    } else if (parsed.data.action === "toggleIntegration") {
+    } else {
       const id = parsed.data.integrationId;
       if (!id) {
         return withCors(request, jsonResponse({ error: "integrationId is required" }, 400));
       }
-      const current = settings.integrations[id]?.connected ?? false;
-      settings.integrations[id] = { connected: !current, lastSyncAt: current ? settings.integrations[id]?.lastSyncAt : new Date() };
-      settings.markModified("integrations");
-      await settings.save();
-    } else if (parsed.data.action === "syncIntegration") {
-      const id = parsed.data.integrationId;
-      if (!id) {
-        return withCors(request, jsonResponse({ error: "integrationId is required" }, 400));
-      }
-      if (!settings.integrations[id]?.connected) {
-        return withCors(request, jsonResponse({ error: "Connect the integration first" }, 400));
-      }
-      settings.integrations[id] = { connected: true, lastSyncAt: new Date() };
-      settings.markModified("integrations");
-      await settings.save();
       const meta = INTEGRATION_META.find((m) => m.id === id);
-      await notify({
-        restaurantId: auth.restaurantId,
-        title: `${meta?.name ?? "Integration"} synced`,
-        message: `Latest billing and expense data was synced with ${meta?.name ?? id}.`,
-        category: "System",
-        severity: "success",
-      });
+      const connected = settings.integrations[id]?.connected ?? false;
+      const wantsDisconnect =
+        parsed.data.action === "disconnectIntegration" || (parsed.data.action === "toggleIntegration" && connected);
+      if (wantsDisconnect) {
+        if (!connected) {
+          return withCors(request, jsonResponse({ error: `${meta?.name ?? id} is not connected` }, 409));
+        }
+        settings.integrations[id] = { connected: false, lastSyncAt: settings.integrations[id]?.lastSyncAt };
+        settings.markModified("integrations");
+        await settings.save();
+        await notify({
+          restaurantId: auth.restaurantId,
+          title: `${meta?.name ?? "Integration"} disconnected`,
+          message: `${meta?.name ?? id} was disconnected from Dinevoro.`,
+          category: "System",
+          severity: "info",
+        });
+      } else {
+        // Connecting or syncing needs a real connector with the provider's credentials, which is not built yet.
+        return withCors(
+          request,
+          jsonResponse({ error: `${meta?.name ?? id} integration is coming soon. It cannot be connected yet.` }, 409),
+        );
+      }
     }
 
     const getRes = await GET(request);

@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { channelOrderCreateSchema } from "@/lib/validation";
 import Order from "@/models/Order";
+import { applyRecipeStock } from "@/lib/stock";
+import { reconcileTables } from "@/lib/table-status";
 import Table from "@/models/Table";
 import Restaurant from "@/models/Restaurant";
 import MenuItem from "@/models/MenuItem";
@@ -99,6 +101,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tab
       kitchenStatus: "New",
       externalId: `QR-${String(qrCount + 1).padStart(3, "0")}`,
     });
+    await applyRecipeStock(order, -1);
+    await reconcileTables(String(order.restaurant));
 
     await notify({
       restaurantId,

@@ -42,3 +42,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return withCors(request, jsonResponse({ error: "Something went wrong" }, 500));
   }
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = getAuthContext(request);
+  if (!auth) return unauthorized(request);
+
+  const { id } = await params;
+  await connectToDatabase();
+  const item = await InventoryItem.findOneAndDelete({ _id: id, restaurant: auth.restaurantId });
+  if (!item) {
+    return withCors(request, jsonResponse({ error: "Inventory item not found" }, 404));
+  }
+  return withCors(request, jsonResponse({ ok: true }));
+}

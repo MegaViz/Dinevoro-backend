@@ -10,9 +10,10 @@ export function countAttendance(staff: StaffList) {
   const late = staff.filter((s) => s.status === "Late").length;
   const absent = staff.filter((s) => s.status === "Absent").length;
   const offDuty = staff.filter((s) => s.status === "Off Duty").length;
+  const notCheckedIn = staff.filter((s) => s.status === "Not Checked In").length;
   const scheduled = staff.length - offDuty;
   const attendancePct = scheduled > 0 ? Math.round(((present + late) / scheduled) * 100) : 0;
-  return { total: staff.length, present, late, absent, offDuty, attendancePct };
+  return { total: staff.length, present, late, absent, offDuty, notCheckedIn, attendancePct };
 }
 
 /**

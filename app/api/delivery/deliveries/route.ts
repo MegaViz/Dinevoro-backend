@@ -3,31 +3,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import Order from "@/models/Order";
-import DeliveryAgent from "@/models/DeliveryAgent";
-import { serializeOrder } from "@/lib/serialize-resources";
+import { serializeDeliveryOrder } from "@/lib/delivery";
 import { seedDemoChannelOrders, seedDefaultAgents } from "@/lib/seed-channel-orders";
-
-async function serializeDeliveryOrder(order: Awaited<ReturnType<typeof Order.findOne>>) {
-  if (!order) return null;
-  const base = serializeOrder(order);
-  let agentName = "";
-  if (order.deliveryAgent) {
-    const agent = await DeliveryAgent.findById(order.deliveryAgent);
-    agentName = agent?.name ?? "";
-  }
-  let deliveryLabel = "Pending Assignment";
-  if (order.channelStatus === "OutForDelivery") deliveryLabel = "Out for Delivery";
-  else if (order.channelStatus === "Delivered") deliveryLabel = "Delivered";
-  else if (order.deliveryAgent && order.channelStatus === "Preparing") deliveryLabel = "Picked Up";
-  else if (order.deliveryAgent) deliveryLabel = "Picked Up";
-
-  return {
-    ...base,
-    agentName,
-    deliveryLabel,
-    deliveryId: `DEL-${String(order.billNo).slice(-3)}`,
-  };
-}
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);

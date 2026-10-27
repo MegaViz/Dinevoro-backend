@@ -5,6 +5,10 @@ const ingredientSchema = new Schema(
     name: { type: String, required: true, trim: true },
     qty: { type: String, required: true, trim: true },
     cost: { type: Number, required: true, min: 0 },
+    /** Stock item this ingredient comes from, and how much one portion uses. */
+    inventoryItem: { type: Schema.Types.ObjectId, ref: "InventoryItem", default: null },
+    amount: { type: Number, default: null },
+    unit: { type: String, default: null },
   },
   { _id: false },
 );

@@ -41,8 +41,15 @@ const orderSchema = new Schema(
     /** Whether this bill has been added to the customer's visits/spend (and so loyalty points). No default: older bills predate tracking. */
     customerCredited: { type: Boolean },
     refundedAt: { type: Date },
+    /** Money returned to the customer; a part refund keeps the bill Paid with the rest kept as revenue. */
+    refundAmount: { type: Number, default: 0 },
+    refundReason: { type: String, default: "" },
+    voidedAt: { type: Date },
+    voidReason: { type: String, default: "" },
+    /** Recipe ingredients for this bill have been taken out of stock. */
+    stockDeducted: { type: Boolean, default: false },
     mode: { type: String, enum: ["Cash", "UPI", "Card"], default: "Cash" },
-    status: { type: String, enum: ["Paid", "Pending", "Refunded"], default: "Paid" },
+    status: { type: String, enum: ["Paid", "Pending", "Refunded", "Void"], default: "Paid" },
     kitchenStatus: { type: String, enum: ["New", "Preparing", "Ready", "Served"], default: "New" },
     orderType: { type: String, enum: ["Dine-in", "Takeaway", "Online", "Parcel"], default: "Dine-in" },
     channel: { type: String, enum: ["POS", "QR", "Swiggy", "Zomato", "Website"], default: "POS", index: true },

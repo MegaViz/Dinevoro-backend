@@ -2,6 +2,7 @@ import "@/lib/env";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { mountRoute } from "@/lib/express-adapter";
+import { enforceRoleAccess } from "@/lib/role-access";
 
 import * as health from "@/app/api/health/route";
 import * as healthDb from "@/app/api/health/db/route";
@@ -65,6 +66,12 @@ import * as saRoles from "@/app/api/super-admin/team/roles/route";
 import * as saRoleId from "@/app/api/super-admin/team/roles/[id]/route";
 import * as saTeamUsers from "@/app/api/super-admin/team/users/route";
 import * as saTeamUserId from "@/app/api/super-admin/team/users/[id]/route";
+import * as plansNotify from "@/app/api/plans/notify/route";
+import * as plans from "@/app/api/plans/route";
+import * as forgotPassword from "@/app/api/auth/forgot-password/route";
+import * as teamUsers from "@/app/api/team/users/route";
+import * as teamUserId from "@/app/api/team/users/[id]/route";
+import * as saTenantResetPassword from "@/app/api/super-admin/tenants/[id]/reset-password/route";
 import cors from "cors";
 const app = express();
 const port = Number(process.env.PORT) || 4000;
@@ -101,6 +108,8 @@ app.use(
 app.use(cookieParser());
 // Receipts and logos are sent as data URLs, so allow bodies larger than the 100kb default.
 app.use(express.json({ limit: "5mb" }));
+// Staff accounts (Manager / Cashier / Kitchen Staff) only reach the endpoints their role covers.
+app.use(enforceRoleAccess);
 
 app.get("/", (_req, res) => {
   res.type("html").send("<h1>HotelLite API</h1><p>Backend is running.</p>");
@@ -118,6 +127,21 @@ mountRoute(app, "patch", "/api/admin/subscription", register.Subscription_Route)
 mountRoute(app, "options", "/api/auth/login", login.OPTIONS);
 mountRoute(app, "post", "/api/auth/login", login.POST);
 
+
+mountRoute(app, "options", "/api/auth/forgot-password", forgotPassword.OPTIONS);
+mountRoute(app, "post", "/api/auth/forgot-password", forgotPassword.POST);
+
+mountRoute(app, "options", "/api/plans", plans.OPTIONS);
+mountRoute(app, "get", "/api/plans", plans.GET);
+mountRoute(app, "options", "/api/plans/notify", plansNotify.OPTIONS);
+mountRoute(app, "post", "/api/plans/notify", plansNotify.POST);
+
+mountRoute(app, "options", "/api/team/users", teamUsers.OPTIONS);
+mountRoute(app, "get", "/api/team/users", teamUsers.GET);
+mountRoute(app, "post", "/api/team/users", teamUsers.POST);
+mountRoute(app, "options", "/api/team/users/:id", teamUserId.OPTIONS);
+mountRoute(app, "patch", "/api/team/users/:id", teamUserId.PATCH, true);
+mountRoute(app, "delete", "/api/team/users/:id", teamUserId.DELETE, true);
 
 mountRoute(app, "options", "/api/auth/me", me.OPTIONS);
 mountRoute(app, "get", "/api/auth/me", me.GET);
@@ -149,6 +173,7 @@ mountRoute(app, "get", "/api/inventory", inventory.GET);
 
 mountRoute(app, "options", "/api/inventory/:id", inventoryId.OPTIONS);
 mountRoute(app, "patch", "/api/inventory/:id", inventoryId.PATCH, true);
+mountRoute(app, "delete", "/api/inventory/:id", inventoryId.DELETE, true);
 
 mountRoute(app, "options", "/api/inventory/stock-in", stockIn.OPTIONS);
 mountRoute(app, "get", "/api/inventory/stock-in", stockIn.GET);
@@ -167,6 +192,7 @@ mountRoute(app, "get", "/api/customers", customers.GET);
 mountRoute(app, "post", "/api/customers", customers.POST);
 
 mountRoute(app, "options", "/api/customers/:id", customerId.OPTIONS);
+mountRoute(app, "get", "/api/customers/:id", customerId.GET, true);
 mountRoute(app, "patch", "/api/customers/:id", customerId.PATCH, true);
 mountRoute(app, "delete", "/api/customers/:id", customerId.DELETE, true);
 
@@ -269,6 +295,7 @@ mountRoute(app, "get", "/api/attendance", attendance.GET);
 mountRoute(app, "post", "/api/attendance", attendance.POST);
 mountRoute(app, "options", "/api/attendance/:id", attendanceId.OPTIONS);
 mountRoute(app, "patch", "/api/attendance/:id", attendanceId.PATCH, true);
+mountRoute(app, "delete", "/api/attendance/:id", attendanceId.DELETE, true);
 
 mountRoute(app, "options", "/api/super-admin/auth/setup", saSetup.OPTIONS);
 mountRoute(app, "get", "/api/super-admin/auth/setup", saSetup.GET);
@@ -292,6 +319,9 @@ mountRoute(
   saTenantId.PATCH,
   true,
 );
+
+mountRoute(app, "options", "/api/super-admin/tenants/:id/reset-password", saTenantResetPassword.OPTIONS);
+mountRoute(app, "post", "/api/super-admin/tenants/:id/reset-password", saTenantResetPassword.POST, true);
 
 mountRoute(app, "options", "/api/super-admin/plans", saPlans.OPTIONS);
 mountRoute(app, "get", "/api/super-admin/plans", saPlans.GET);
@@ -370,6 +400,16 @@ mountRoute(
   saTeamUserId.PATCH,
   true,
 );
+
+// Unknown API routes and unexpected errors answer in JSON, never with Express's HTML pages.
+app.use((req, res) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
+});
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = (err as { status?: number; statusCode?: number })?.status ?? (err as { statusCode?: number })?.statusCode ?? 500;
+  if (status >= 500) console.error("Unhandled error:", err);
+  res.status(status).json({ error: status === 400 ? "Malformed request body" : status === 413 ? "Request is too large" : "Internal server error" });
+});
 
 app.listen(port, () => {
   console.log(`HotelLite API listening on port ${port}`);

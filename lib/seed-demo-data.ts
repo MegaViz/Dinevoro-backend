@@ -71,7 +71,7 @@ const DEFAULT_RECIPES = [
     category: "Main Course",
     salePrice: 320,
     ingredients: [
-      { name: "Chicken", qty: "250g", cost: 80 },
+      { name: "Whole Chicken", qty: "250g", cost: 80 },
       { name: "Butter", qty: "50g", cost: 25 },
       { name: "Tomato puree", qty: "100g", cost: 18 },
       { name: "Cream", qty: "50ml", cost: 15 },
@@ -107,7 +107,7 @@ const DEFAULT_RECIPES = [
     salePrice: 380,
     ingredients: [
       { name: "Basmati rice", qty: "200g", cost: 40 },
-      { name: "Chicken", qty: "200g", cost: 64 },
+      { name: "Whole Chicken", qty: "200g", cost: 64 },
       { name: "Onions", qty: "80g", cost: 8 },
       { name: "Yogurt", qty: "50g", cost: 12 },
       { name: "Spices", qty: "1 set", cost: 24 },
@@ -145,10 +145,7 @@ const DEFAULT_ATTENDANCE_HISTORY = () => [
 ];
 
 const DEFAULT_NOTIFICATIONS = [
-  { title: "Payment Pending: #1087", message: "Bill #1087 for Table 7 (₹780) is awaiting payment.", category: "Payments" as const, severity: "warning" as const, read: false, createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
-  { title: "Payment Pending: #1089", message: "Bill #1089 for Table 2 (₹960) has been pending for over 45 minutes.", category: "Payments" as const, severity: "info" as const, read: false, createdAt: new Date(Date.now() - 45 * 60 * 1000) },
-  { title: "Refund Processed: #1086", message: "Refund of ₹1,120 for bill #1086 has been recorded.", category: "Payments" as const, severity: "info" as const, read: true, createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000) },
-  { title: "New Customer: Vikram Mehta", message: "Vikram Mehta (9210987654) was registered. First order: ₹820.", category: "Customers" as const, severity: "info" as const, read: true, createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+  { title: "New Customer: Vikram Mehta", message: "Vikram Mehta (9210987654) was added as a customer.", category: "Customers" as const, severity: "info" as const, read: true, createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
   { title: "New Customer: Ananya Singh", message: "Ananya Singh (9321098765) joined. Total spend so far: ₹28,900.", category: "Customers" as const, severity: "success" as const, read: true, createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
 ];
 

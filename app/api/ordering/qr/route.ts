@@ -4,6 +4,8 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { channelOrderCreateSchema, orderUpdateSchema } from "@/lib/validation";
 import Order from "@/models/Order";
+import { applyRecipeStock } from "@/lib/stock";
+import { reconcileTables } from "@/lib/table-status";
 import Table from "@/models/Table";
 import { serializeOrder, serializeTable } from "@/lib/serialize-resources";
 import { seedDemoChannelOrders } from "@/lib/seed-channel-orders";
@@ -75,6 +77,8 @@ export async function POST(request: Request) {
       kitchenStatus: "New",
       externalId: `QR-${String(qrCount + 1).padStart(3, "0")}`,
     });
+    await applyRecipeStock(order, -1);
+    await reconcileTables(String(order.restaurant));
 
     return withCors(request, jsonResponse({ order: serializeOrder(order) }, 201));
   } catch (err) {

@@ -11,10 +11,8 @@ export async function GET(request: Request) {
     const count = await countSuperAdmins();
     return withCors(
       request,
-      jsonResponse({
-        setupRequired: count === 0,
-        superAdminCount: count,
-      }),
+      // Only says whether first-time setup is still open; never how many admins exist.
+      jsonResponse({ setupRequired: count === 0 }),
     );
   } catch (err) {
     console.error("Super admin setup status error:", err);

@@ -12,6 +12,9 @@ const userSchema = new Schema(
     },
     subscriptionEndsAt: {type: Date},
     restaurant: { type: Schema.Types.ObjectId, ref: "Restaurant" },
+    /** Staff accounts can be switched off by the owner without deleting them. */
+    active: { type: Boolean, default: true },
+    passwordResetRequestedAt: { type: Date },
   },
   { timestamps: true },
 );

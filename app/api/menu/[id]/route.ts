@@ -2,7 +2,8 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
-import { menuItemUpdateSchema } from "@/lib/validation";
+import { menuItemUpdateSchema, MENU_CATEGORIES } from "@/lib/validation";
+import { isKnownCategory } from "@/app/api/menu/route";
 import MenuItem from "@/models/MenuItem";
 import { serializeMenuItem } from "@/lib/serialize-resources";
 
@@ -23,6 +24,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
+
+    if (parsed.data.category && !(await isKnownCategory(auth.restaurantId, parsed.data.category))) {
+      return withCors(request, jsonResponse({ error: `Choose a menu category: ${MENU_CATEGORIES.join(", ")}` }, 400));
+    }
 
     if (parsed.data.name) {
       const duplicate = await MenuItem.findOne({
@@ -53,7 +58,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const { id } = await params;
   await connectToDatabase();
-  await MenuItem.findOneAndDelete({ _id: id, restaurant: auth.restaurantId });
+  const deleted = await MenuItem.findOneAndDelete({ _id: id, restaurant: auth.restaurantId });
+  if (!deleted) {
+    return withCors(request, jsonResponse({ error: "Item not found" }, 404));
+  }
 
   return withCors(request, jsonResponse({ ok: true }));
 }

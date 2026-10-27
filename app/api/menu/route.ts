@@ -2,10 +2,16 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
-import { menuItemSchema } from "@/lib/validation";
+import { menuItemSchema, MENU_CATEGORIES } from "@/lib/validation";
 import MenuItem from "@/models/MenuItem";
 import { serializeMenuItem } from "@/lib/serialize-resources";
 import { seedDefaultMenuItems } from "@/lib/seed-demo-data";
+
+/** Standard menu sections, plus any section this restaurant already uses. */
+export async function isKnownCategory(restaurantId: string, category: string) {
+  if (MENU_CATEGORIES.some((c) => c.toLowerCase() === category.toLowerCase())) return true;
+  return Boolean(await MenuItem.exists({ restaurant: restaurantId, category }));
+}
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -34,6 +40,9 @@ export async function POST(request: Request) {
     }
 
     await connectToDatabase();
+    if (!(await isKnownCategory(auth.restaurantId, parsed.data.category))) {
+      return withCors(request, jsonResponse({ error: `Choose a menu category: ${MENU_CATEGORIES.join(", ")}` }, 400));
+    }
     const duplicate = await MenuItem.findOne({
       restaurant: auth.restaurantId,
       name: new RegExp(`^${parsed.data.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),

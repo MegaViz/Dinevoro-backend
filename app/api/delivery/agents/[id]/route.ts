@@ -2,7 +2,7 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
-import { deliveryAgentUpdateSchema } from "@/lib/validation";
+import { onlyProvided, deliveryAgentUpdateSchema } from "@/lib/validation";
 import DeliveryAgent from "@/models/DeliveryAgent";
 import { serializeDeliveryAgent } from "@/lib/serialize-resources";
 
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
-    const agent = await DeliveryAgent.findOneAndUpdate({ _id: id, restaurant: auth.restaurantId }, parsed.data, {
+    const agent = await DeliveryAgent.findOneAndUpdate({ _id: id, restaurant: auth.restaurantId }, onlyProvided(parsed.data, body), {
       new: true,
     });
 

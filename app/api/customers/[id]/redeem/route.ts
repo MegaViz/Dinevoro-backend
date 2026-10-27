@@ -5,7 +5,8 @@ import { withCors, corsPreflight } from "@/lib/cors";
 import { loyaltyRedeemSchema } from "@/lib/validation";
 import Customer from "@/models/Customer";
 import { serializeCustomer } from "@/lib/serialize-resources";
-import { loyaltyEarned } from "@/lib/customer-stats";
+import { loyaltyEarned, loyaltyConfigOf } from "@/lib/customer-stats";
+import Restaurant from "@/models/Restaurant";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -29,7 +30,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return withCors(request, jsonResponse({ error: "Customer not found" }, 404));
     }
 
-    const available = loyaltyEarned(customer.totalSpent, customer.loyaltyPointsRedeemed ?? 0);
+    const restaurant = await Restaurant.findById(auth.restaurantId).select("loyalty");
+    const config = loyaltyConfigOf(restaurant);
+    const available = loyaltyEarned(customer.totalSpent, customer.loyaltyPointsRedeemed ?? 0, config);
     if (parsed.data.points > available) {
       return withCors(
         request,
@@ -45,7 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       jsonResponse({
         customer: serializeCustomer(customer),
         redeemed: parsed.data.points,
-        discountAmount: parsed.data.points,
+        discountAmount: Math.round(parsed.data.points * config.pointValue * 100) / 100,
       }),
     );
   } catch (err) {

@@ -1,4 +1,8 @@
 import type { Express, Request, Response } from "express";
+import { isValidObjectId } from "mongoose";
+
+/** Route params that hold MongoDB ids. A malformed id can never match a record. */
+const ID_PARAMS = new Set(["id", "tableId"]);
 
 function toWebRequest(req: Request): globalThis.Request {
   const protocol = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol ?? "http";
@@ -53,6 +57,15 @@ async function runHandler(
   hasParams: boolean,
 ) {
   try {
+    if (req.method !== "OPTIONS") {
+      const badParam = Object.entries(req.params).find(
+        ([key, value]) => ID_PARAMS.has(key) && !(isValidObjectId(value) && /^[0-9a-f]{24}$/i.test(String(value))),
+      );
+      if (badParam) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+    }
     const request = toWebRequest(req);
     const params = Object.fromEntries(
       Object.entries(req.params).map(([key, value]) => [key, String(value)]),

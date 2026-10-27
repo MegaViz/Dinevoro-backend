@@ -9,6 +9,7 @@ import Expense from "@/models/Expense";
 import InventoryItem from "@/models/InventoryItem";
 import Table from "@/models/Table";
 import { seedDefaultTables } from "@/lib/seed-tables";
+import { reconcileTables } from "@/lib/table-status";
 import { seedDefaultExpenses, seedDefaultInventory } from "@/lib/seed-demo-data";
 import { seedKitchenOrders } from "@/lib/seed-kitchen-orders";
 import { seedDemoChannelOrders } from "@/lib/seed-channel-orders";
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
   await seedDefaultExpenses(auth.restaurantId);
   await seedKitchenOrders(auth.restaurantId);
   await seedDemoChannelOrders(auth.restaurantId);
+  await reconcileTables(auth.restaurantId);
   const restaurant = auth.restaurantId;
 
   const todayStart = startOfDay(new Date());
@@ -36,17 +38,17 @@ export async function GET(request: Request) {
 
   const [todayOrders, yesterdayOrders, todayExpenses, lowStockItems, weekOrders, recentOrders, tables, kitchenOrders, onlinePending, activeDeliveries, unassignedDeliveries] =
     await Promise.all([
-      Order.find({ restaurant, createdAt: { $gte: todayStart, $lte: todayEnd }, status: { $ne: "Refunded" } }),
-      Order.find({ restaurant, createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd }, status: { $ne: "Refunded" } }),
+      Order.find({ restaurant, createdAt: { $gte: todayStart, $lte: todayEnd }, status: { $nin: ["Refunded", "Void"] } }),
+      Order.find({ restaurant, createdAt: { $gte: yesterdayStart, $lte: yesterdayEnd }, status: { $nin: ["Refunded", "Void"] } }),
       Expense.find({ restaurant, createdAt: { $gte: todayStart, $lte: todayEnd } }),
       InventoryItem.find({ restaurant, $expr: { $lte: ["$quantity", "$reorderLevel"] } }).limit(5),
-      Order.find({ restaurant, createdAt: { $gte: startOfDay(daysAgo(6)) }, status: "Paid" }),
+      Order.find({ restaurant, createdAt: { $gte: startOfDay(daysAgo(6)) }, status: { $in: ["Paid", "Pending"] } }),
       Order.find({ restaurant }).sort({ createdAt: -1 }).limit(6),
       Table.find({ restaurant }),
       Order.find({
         restaurant,
         kitchenStatus: { $in: ["New", "Preparing", "Ready"] },
-        status: { $ne: "Refunded" },
+        status: { $nin: ["Refunded", "Void"] },
       }),
       Order.find({
         restaurant,
@@ -71,12 +73,14 @@ export async function GET(request: Request) {
   // Revenue is money actually received, including part payments on bills that are still pending.
   const todayRevenue = roundMoney(todayOrders.reduce((sum, o) => sum + amountReceived(o), 0));
   const yesterdayRevenue = roundMoney(yesterdayOrders.reduce((sum, o) => sum + amountReceived(o), 0));
-  const revenueChange =
-    yesterdayRevenue > 0 ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100) : todayRevenue > 0 ? 100 : 0;
+  // No percentage when there is nothing to compare against (yesterday ₹0).
+  const revenueChange = yesterdayRevenue > 0 ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100) : null;
 
   const todayExpenseTotal = todayExpenses.reduce((sum, e) => sum + e.amount, 0);
   const pendingOrders = todayOrders.filter((o) => o.status === "Pending");
-  const todayOrdersCount = todayPaid.length;
+  // Every order placed today counts, paid or not (voided and refunded bills are excluded above).
+  const todayOrdersCount = todayOrders.length;
+  const todayPaidCount = todayPaid.length;
   const pendingCount = pendingOrders.length;
 
   const weeklyRevenue = Array.from({ length: 7 }, (_, i) => {
@@ -85,7 +89,7 @@ export async function GET(request: Request) {
     const dayEnd = endOfDay(day);
     const revenue = weekOrders
       .filter((o) => o.createdAt >= dayStart && o.createdAt <= dayEnd)
-      .reduce((sum, o) => sum + o.total, 0);
+      .reduce((sum, o) => sum + amountReceived(o), 0);
     return { day: formatDate(day, { weekday: "short" }), revenue };
   });
 
@@ -123,6 +127,7 @@ export async function GET(request: Request) {
     jsonResponse({
       todayRevenue,
       todayOrdersCount,
+      todayPaidCount,
       revenueChange,
       pendingOrdersCount: pendingCount,
       stockAlerts: stockItems.length,

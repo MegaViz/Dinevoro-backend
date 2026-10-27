@@ -7,7 +7,9 @@ import Order from "@/models/Order";
 import Table from "@/models/Table";
 import { serializeOrder } from "@/lib/serialize-resources";
 import { notify } from "@/lib/notify";
-import { creditCustomerForOrder } from "@/lib/customer-stats";
+import { creditCustomerForOrder, normalizeMobile, upsertCustomerForBill } from "@/lib/customer-stats";
+import { applyRecipeStock } from "@/lib/stock";
+import { reconcileTables } from "@/lib/table-status";
 import { computeOrderTotals, getTaxSettings, nextInvoiceNumber } from "@/lib/billing";
 
 export async function OPTIONS(request: Request) {
@@ -45,7 +47,11 @@ export async function POST(request: Request) {
     }
 
     const data = parsed.data;
+    if (data.customerPhone && !normalizeMobile(data.customerPhone)) {
+      return withCors(request, jsonResponse({ error: "Enter a valid 10-digit mobile number for the customer" }, 400));
+    }
     await connectToDatabase();
+    const customer = await upsertCustomerForBill(auth.restaurantId, data.customerName, data.customerPhone);
 
     let tableOrNo = data.tableOrNo;
     let tableId = data.tableId;
@@ -74,7 +80,8 @@ export async function POST(request: Request) {
           invoiceNo,
           table: tableId || undefined,
           tableOrNo,
-          customerName: data.customerName || "Walk-in",
+          customerName: customer?.name ?? (data.customerName || "Walk-in"),
+          customer: customer?._id,
           items: totals.items.map((line) => ({
             menuItem: line.menuItemId,
             name: line.name,
@@ -100,14 +107,10 @@ export async function POST(request: Request) {
       customCreatedAt ? { timestamps: false } : undefined,
     );
 
-    if (tableId) {
-      const tableStatus = data.status === "Paid" ? "Billing" : "Occupied";
-      await Table.findByIdAndUpdate(tableId, {
-        status: tableStatus,
-        customerName: data.customerName || "Walk-in",
-        occupiedAt: new Date(),
-        currentOrder: order._id,
-      });
+    // Ingredients are used as soon as the order is placed.
+    await applyRecipeStock(order, -1);
+    if (tableId || data.orderType === "Dine-in") {
+      await reconcileTables(auth.restaurantId);
     }
 
     if (order.status === "Pending") {

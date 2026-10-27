@@ -45,6 +45,20 @@ const restaurantSchema = new Schema(
       default: () => ["Operations", "Billing", "Menu"],
     },
     tenantCode: { type: String, default: "" },
+    /** When the owner accepted the Terms of Service and Privacy Policy at sign-up. */
+    termsAcceptedAt: { type: Date },
+    loyalty: {
+      /** Rupees a customer spends to earn one point at the base tier. */
+      spendPerPoint: { type: Number, default: 10 },
+      /** Value of one point in rupees when redeemed. */
+      pointValue: { type: Number, default: 1 },
+      silverMin: { type: Number, default: 8000 },
+      goldMin: { type: Number, default: 15000 },
+      platinumMin: { type: Number, default: 30000 },
+      silverMultiplier: { type: Number, default: 1.5 },
+      goldMultiplier: { type: Number, default: 2 },
+      platinumMultiplier: { type: Number, default: 3 },
+    },
   },
   { timestamps: true },
 );

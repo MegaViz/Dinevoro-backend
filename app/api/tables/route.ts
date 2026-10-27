@@ -6,6 +6,7 @@ import { tableSchema } from "@/lib/validation";
 import Table from "@/models/Table";
 import { serializeTable } from "@/lib/serialize-resources";
 import { seedDefaultTables } from "@/lib/seed-tables";
+import { reconcileTables } from "@/lib/table-status";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
 
   await connectToDatabase();
   await seedDefaultTables(auth.restaurantId);
+  await reconcileTables(auth.restaurantId);
 
   const { searchParams } = new URL(request.url);
   const area = searchParams.get("area");

@@ -34,6 +34,7 @@ export function serializeTable(table: TableDoc) {
     area: table.area,
     status: table.status,
     customerName: table.customerName,
+    customerPhone: table.customerPhone ?? "",
     reservedAt: table.reservedAt,
     occupiedAt: table.occupiedAt?.toISOString() ?? null,
     currentOrder: table.currentOrder?.toString() ?? null,
@@ -62,6 +63,11 @@ export function serializeOrder(order: OrderDoc) {
     })),
     mode: order.mode,
     status: order.status,
+    customerId: order.customer?.toString() ?? null,
+    refundAmount: order.refundAmount ?? 0,
+    refundReason: order.refundReason ?? "",
+    refundedAt: order.refundedAt ?? null,
+    voidReason: order.voidReason ?? "",
     kitchenStatus: order.kitchenStatus,
     orderType: order.orderType,
     channel: order.channel,
@@ -145,6 +151,14 @@ export function serializeCustomer(customer: CustomerDoc) {
 
 export function serializeRecipe(recipe: RecipeDoc) {
   const costPrice = recipe.ingredients.reduce((sum, ing) => sum + ing.cost, 0);
+  const ingredients = recipe.ingredients.map((ing) => ({
+    name: ing.name,
+    qty: ing.qty,
+    cost: ing.cost,
+    inventoryItemId: ing.inventoryItem ? ing.inventoryItem.toString() : null,
+    amount: ing.amount ?? null,
+    unit: ing.unit ?? null,
+  }));
   const grossProfit = recipe.salePrice - costPrice;
   const margin = recipe.salePrice > 0 ? (grossProfit / recipe.salePrice) * 100 : 0;
   return {
@@ -152,7 +166,7 @@ export function serializeRecipe(recipe: RecipeDoc) {
     name: recipe.name,
     category: recipe.category,
     salePrice: recipe.salePrice,
-    ingredients: recipe.ingredients,
+    ingredients,
     costPrice,
     grossProfit,
     margin: Math.round(margin * 10) / 10,

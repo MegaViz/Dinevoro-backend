@@ -6,6 +6,7 @@ import { orderUpdateSchema } from "@/lib/validation";
 import Order from "@/models/Order";
 import DeliveryAgent from "@/models/DeliveryAgent";
 import { serializeOrder } from "@/lib/serialize-resources";
+import { deliveryTransitionError } from "@/lib/delivery";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -24,23 +25,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
+    const existing = await Order.findOne({ _id: id, restaurant: auth.restaurantId, channel: { $in: ["Swiggy", "Zomato", "Website"] } });
+    if (!existing) {
+      return withCors(request, jsonResponse({ error: "Order not found" }, 404));
+    }
+    const blocked = parsed.data.channelStatus ? deliveryTransitionError(existing, parsed.data.channelStatus) : null;
+    if (blocked) {
+      return withCors(request, jsonResponse({ error: blocked }, 409));
+    }
     const update: Record<string, unknown> = {};
 
     if (parsed.data.channelStatus === "Rejected") {
       update.channelStatus = "Rejected";
-      update.status = "Refunded";
+      update.status = existing.status === "Paid" ? "Refunded" : "Void";
     } else if (parsed.data.channelStatus) {
       update.channelStatus = parsed.data.channelStatus;
-      if (parsed.data.channelStatus === "Accepted" || parsed.data.channelStatus === "Preparing") {
+      if ((parsed.data.channelStatus === "Accepted" || parsed.data.channelStatus === "Preparing") && existing.kitchenStatus === "New") {
         update.kitchenStatus = "Preparing";
       }
       if (parsed.data.channelStatus === "OutForDelivery") {
-        update.kitchenStatus = "Ready";
         update.eta = parsed.data.eta ?? 15;
       }
       if (parsed.data.channelStatus === "Delivered") {
-        update.status = "Paid";
         update.kitchenStatus = "Served";
+        if (existing.status === "Pending") {
+          update.status = "Paid";
+          update.amountPaid = existing.total;
+        }
       }
     }
 

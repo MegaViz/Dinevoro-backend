@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
     const user = (await User.findById(payload.userId)) as UserDoc | null;
-    if (!user) {
+    if (!user || user.active === false) {
       return withCors(request, jsonResponse({ error: "Not authenticated" }, 401));
     }
 

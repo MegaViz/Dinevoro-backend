@@ -116,10 +116,10 @@ export async function GET(request: Request) {
   const { start: rangeStart, end: rangeEnd, prevStart, prevEnd } = period;
 
   const [orders, expenses, prevOrders, stockEntries, customers, inventory, menuItems] = await Promise.all([
-    Order.find({ restaurant, createdAt: { $gte: rangeStart, $lte: rangeEnd }, status: { $ne: "Refunded" } }),
+    Order.find({ restaurant, createdAt: { $gte: rangeStart, $lte: rangeEnd }, status: { $nin: ["Refunded", "Void"] } }),
     // Expenses use exactly the same day boundaries (restaurant time zone) as the selected period.
     Expense.find({ restaurant, createdAt: { $gte: rangeStart, $lte: rangeEnd } }),
-    Order.find({ restaurant, createdAt: { $gte: prevStart, $lte: prevEnd }, status: { $ne: "Refunded" } }),
+    Order.find({ restaurant, createdAt: { $gte: prevStart, $lte: prevEnd }, status: { $nin: ["Refunded", "Void"] } }),
     StockEntry.find({ restaurant }).sort({ createdAt: -1 }).limit(10),
     Customer.find({ restaurant }).sort({ totalSpent: -1 }),
     InventoryItem.find({ restaurant }).sort({ name: 1 }),
@@ -176,35 +176,47 @@ export async function GET(request: Request) {
   if (tab === "top-items") {
     const menuById = new Map(menuItems.map((m) => [m._id.toString(), m]));
     const menuByName = new Map(menuItems.map((m) => [m.name.toLowerCase(), m]));
-    const itemMap = new Map<string, { name: string; category: string; orders: number; revenue: number }>();
-    for (const order of orders) {
+    // Sold means paid for: pending, voided and refunded bills are left out.
+    const itemMap = new Map<string, { name: string; category: string; units: number; orders: number; revenue: number }>();
+    for (const order of paidOrders) {
+      const seen = new Set<string>();
       for (const line of order.items) {
         const menu = (line.menuItem && menuById.get(line.menuItem.toString())) || menuByName.get(line.name.toLowerCase());
-        const existing = itemMap.get(line.name) ?? { name: line.name, category: menu?.category ?? "Uncategorized", orders: 0, revenue: 0 };
-        existing.orders += line.qty;
+        const name = menu?.name ?? line.name;
+        const existing = itemMap.get(name) ?? { name, category: menu?.category ?? "Uncategorized", units: 0, orders: 0, revenue: 0 };
+        existing.units += line.qty;
+        if (!seen.has(name)) existing.orders += 1;
+        seen.add(name);
         existing.revenue = roundMoney(existing.revenue + line.price * line.qty);
-        itemMap.set(line.name, existing);
+        itemMap.set(name, existing);
       }
     }
-    const allItems = [...itemMap.values()].sort((a, b) => b.orders - a.orders);
+    const allItems = [...itemMap.values()].sort((a, b) => b.units - a.units || b.revenue - a.revenue);
     const items = allItems.slice(0, 8);
 
     // Category totals use the same item data as the table (all items sold in the period).
-    const categoryTotals = new Map<string, number>();
-    for (const item of allItems) categoryTotals.set(item.category, (categoryTotals.get(item.category) ?? 0) + item.orders);
-    const topCategoryEntry = [...categoryTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+    const categoryTotals = new Map<string, { units: number; revenue: number }>();
+    for (const item of allItems) {
+      const acc = categoryTotals.get(item.category) ?? { units: 0, revenue: 0 };
+      acc.units += item.units;
+      acc.revenue = roundMoney(acc.revenue + item.revenue);
+      categoryTotals.set(item.category, acc);
+    }
+    const topCategoryEntry = [...categoryTotals.entries()].sort((a, b) => b[1].units - a[1].units || b[1].revenue - a[1].revenue)[0];
     const topRevenueItem = [...allItems].sort((a, b) => b.revenue - a.revenue)[0];
 
-    const maxOrders = items[0]?.orders || 1;
+    const maxUnits = items[0]?.units || 1;
     return withCors(request, jsonResponse({
       ...base,
-      topItems: items.map((i) => ({ ...i, popularity: Math.round((i.orders / maxOrders) * 100) })),
+      topItems: items.map((i) => ({ ...i, popularity: Math.round((i.units / maxUnits) * 100) })),
       topItemsSummary: {
-        totalSold: allItems.reduce((s, i) => s + i.orders, 0),
+        totalSold: allItems.reduce((s, i) => s + i.units, 0),
         topCategory: topCategoryEntry?.[0] ?? "—",
-        topCategoryUnits: topCategoryEntry?.[1] ?? 0,
+        topCategoryUnits: topCategoryEntry?.[1].units ?? 0,
+        topCategoryRevenue: topCategoryEntry?.[1].revenue ?? 0,
         bestSeller: items[0]?.name ?? "—",
         bestSellerOrders: items[0]?.orders ?? 0,
+        bestSellerUnits: items[0]?.units ?? 0,
         topRevenueItem: topRevenueItem?.name ?? "—",
         topRevenue: topRevenueItem?.revenue ?? 0,
       },
@@ -213,7 +225,7 @@ export async function GET(request: Request) {
 
   if (tab === "customers") {
     // Last order comes from the customer's actual bills, never from the registration date.
-    const customerOrders = await Order.find({ restaurant, status: { $ne: "Refunded" } })
+    const customerOrders = await Order.find({ restaurant, status: { $nin: ["Refunded", "Void"] } })
       .select("customer customerName createdAt")
       .sort({ createdAt: -1 });
     const lastById = new Map<string, Date>();
@@ -250,23 +262,40 @@ export async function GET(request: Request) {
   if (tab === "inventory") {
     const low = inventory.filter((i) => i.quantity <= i.reorderLevel && i.quantity > i.reorderLevel * 0.5);
     const critical = inventory.filter((i) => i.quantity <= i.reorderLevel * 0.5);
-    const stockValue = stockEntries.reduce((s, e) => s + e.cost, 0) || 48200;
+    // Value of what is on the shelf now: current quantity × average purchase cost per unit.
+    const allEntries = await StockEntry.find({ restaurant }).select("item quantity cost");
+    const costByItem = new Map<string, { qty: number; cost: number }>();
+    for (const e of allEntries) {
+      const key = e.item.trim().toLowerCase();
+      const acc = costByItem.get(key) ?? { qty: 0, cost: 0 };
+      acc.qty += e.quantity;
+      acc.cost += e.cost;
+      costByItem.set(key, acc);
+    }
+    const unitCostOf = (name: string) => {
+      const acc = costByItem.get(name.trim().toLowerCase());
+      return acc && acc.qty > 0 ? acc.cost / acc.qty : 0;
+    };
+    const stockValue = roundMoney(inventory.reduce((s, i) => s + i.quantity * unitCostOf(i.name), 0));
+    const unvaluedItems = inventory.filter((i) => i.quantity > 0 && unitCostOf(i.name) === 0).length;
     return withCors(request, jsonResponse({
       ...base,
       inventoryReport: inventory.map((i) => {
         let status = "OK";
         if (i.quantity <= i.reorderLevel * 0.5) status = "Critical";
         else if (i.quantity <= i.reorderLevel) status = "Low";
-        return { name: i.name, stock: i.quantity, unit: i.unit, status };
+        const unitCost = unitCostOf(i.name);
+        return { name: i.name, stock: i.quantity, unit: i.unit, status, unitCost: roundMoney(unitCost), value: roundMoney(i.quantity * unitCost) };
       }),
       inventorySummary: {
-        totalItems: inventory.length || 10,
-        lowStock: low.length || 3,
-        critical: critical.length || 1,
-        criticalItem: critical[0]?.name ?? "Mutton",
-        criticalQty: critical[0]?.quantity ?? 2,
-        criticalUnit: critical[0]?.unit ?? "kg",
+        totalItems: inventory.length,
+        lowStock: low.length,
+        critical: critical.length,
+        criticalItem: critical[0]?.name ?? null,
+        criticalQty: critical[0]?.quantity ?? 0,
+        criticalUnit: critical[0]?.unit ?? "",
         stockValue,
+        unvaluedItems,
       },
     }));
   }

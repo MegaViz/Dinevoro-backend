@@ -4,11 +4,12 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { orderUpdateSchema } from "@/lib/validation";
 import Order from "@/models/Order";
-import Table from "@/models/Table";
 import { serializeOrder } from "@/lib/serialize-resources";
 import { notify } from "@/lib/notify";
 import { creditCustomerForOrder, reverseCustomerForRefund } from "@/lib/customer-stats";
-import { roundMoney } from "@/lib/billing";
+import { amountReceived, roundMoney } from "@/lib/billing";
+import { applyRecipeStock } from "@/lib/stock";
+import { reconcileTables } from "@/lib/table-status";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -28,6 +29,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   return withCors(request, jsonResponse({ order: serializeOrder(order) }));
 }
+
+const KITCHEN_FLOW = ["New", "Preparing", "Ready", "Served"] as const;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = getAuthContext(request);
@@ -52,25 +55,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return withCors(request, jsonResponse({ error: "Order not found" }, 404));
     }
 
+    const conflict = (error: string) => withCors(request, jsonResponse({ error }, 409));
+    const closed = existing.status === "Refunded" || existing.status === "Void";
+
     const update: Record<string, unknown> = {};
-    if (data.kitchenStatus) update.kitchenStatus = data.kitchenStatus;
+    if (data.kitchenStatus && data.kitchenStatus !== existing.kitchenStatus) {
+      // Kitchen tickets only move forward: New → Preparing → Ready → Served.
+      if (closed) {
+        return conflict(`Bill #${existing.billNo} is ${existing.status.toLowerCase()}; its kitchen ticket cannot change`);
+      }
+      const from = KITCHEN_FLOW.indexOf(existing.kitchenStatus as (typeof KITCHEN_FLOW)[number]);
+      const to = KITCHEN_FLOW.indexOf(data.kitchenStatus);
+      if (to < from) {
+        return conflict(`Order #${existing.billNo} is already ${existing.kitchenStatus}; it cannot go back to ${data.kitchenStatus}`);
+      }
+      update.kitchenStatus = data.kitchenStatus;
+    }
     if (data.mode) update.mode = data.mode;
 
     const isPayment = data.amount !== undefined || data.status === "Paid";
     const isRefund = data.status === "Refunded";
+    const isVoid = data.status === "Void";
     let becamePaid = false;
     let paymentAmount = 0;
+    let refundAmount = 0;
+    let fullRefund = false;
 
-    if (isPayment && isRefund) {
-      return withCors(request, jsonResponse({ error: "A payment and a refund cannot be recorded together" }, 400));
+    if ([isPayment, isRefund, isVoid].filter(Boolean).length > 1) {
+      return withCors(request, jsonResponse({ error: "Record one payment, refund or void at a time" }, 400));
     }
 
     if (isPayment) {
-      if (existing.status === "Refunded") {
-        return withCors(request, jsonResponse({ error: `Bill #${existing.billNo} was refunded and cannot be collected` }, 400));
+      if (closed) {
+        return conflict(`Bill #${existing.billNo} was ${existing.status === "Void" ? "voided" : "refunded"} and cannot be collected`);
       }
       if (existing.status === "Paid") {
-        return withCors(request, jsonResponse({ error: `Bill #${existing.billNo} is already paid` }, 400));
+        return conflict(`Bill #${existing.billNo} is already paid`);
       }
       // Validate against what is actually still owed, never against the bill total.
       const alreadyPaid = existing.amountPaid ?? 0;
@@ -92,12 +112,45 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       update.$push = { payments: { amount: paymentAmount, mode: data.mode ?? existing.mode, paidAt: new Date() } };
     } else if (isRefund) {
       if (existing.status !== "Paid") {
-        return withCors(request, jsonResponse({ error: "Only fully paid bills can be refunded" }, 400));
+        return conflict(`Only paid bills can be refunded; bill #${existing.billNo} is ${existing.status.toLowerCase()}`);
       }
-      update.status = "Refunded";
+      if (!data.reason) {
+        return withCors(request, jsonResponse({ error: "Enter a reason for the refund" }, 400));
+      }
+      const received = amountReceived(existing);
+      refundAmount = data.refundAmount ?? received;
+      if (refundAmount > received + 0.001) {
+        return withCors(
+          request,
+          jsonResponse({ error: `Refund ₹${refundAmount.toFixed(2)} is more than the ₹${received.toFixed(2)} received on bill #${existing.billNo}` }, 400),
+        );
+      }
+      fullRefund = refundAmount >= received - 0.001;
+      update.refundAmount = roundMoney((existing.refundAmount ?? 0) + refundAmount);
+      update.refundReason = data.reason;
       update.refundedAt = new Date();
+      // A part refund keeps the bill Paid; the remainder stays as revenue.
+      if (fullRefund) update.status = "Refunded";
+    } else if (isVoid) {
+      if (existing.status !== "Pending" || (existing.amountPaid ?? 0) > 0) {
+        return conflict(
+          existing.status === "Pending"
+            ? `Bill #${existing.billNo} already has a payment; refund it instead of voiding`
+            : `Only unpaid bills can be voided; bill #${existing.billNo} is ${existing.status.toLowerCase()}`,
+        );
+      }
+      if (!data.reason) {
+        return withCors(request, jsonResponse({ error: "Enter a reason for voiding the bill" }, 400));
+      }
+      update.status = "Void";
+      update.voidReason = data.reason;
+      update.voidedAt = new Date();
     } else if (data.status === "Pending" && existing.status !== "Pending") {
-      return withCors(request, jsonResponse({ error: `Bill #${existing.billNo} is already ${existing.status.toLowerCase()}` }, 400));
+      return conflict(`Bill #${existing.billNo} is already ${existing.status.toLowerCase()}`);
+    }
+
+    if (Object.keys(update).length === 0) {
+      return withCors(request, jsonResponse({ order: serializeOrder(existing) }));
     }
 
     // Conditional on the status we validated against, so two quick clicks cannot apply twice.
@@ -106,6 +159,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         _id: id,
         restaurant: auth.restaurantId,
         status: existing.status,
+        kitchenStatus: existing.kitchenStatus,
         // Older bills have no amountPaid stored; null also matches a missing field.
         amountPaid: existing.amountPaid ? existing.amountPaid : { $in: [0, null] },
       },
@@ -113,29 +167,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       { new: true },
     );
     if (!order) {
-      return withCors(request, jsonResponse({ error: "This bill was just updated. Refresh and try again." }, 409));
+      return conflict("This bill was just updated. Refresh and try again.");
     }
 
-    if (order.table) {
-      if (data.kitchenStatus === "Served" || isRefund) {
-        await Table.findByIdAndUpdate(order.table, {
-          status: "Available",
-          customerName: "",
-          reservedAt: "",
-          occupiedAt: null,
-          currentOrder: null,
-        });
-      } else if (becamePaid) {
-        await Table.findByIdAndUpdate(order.table, { status: "Billing" });
-      }
+    if (order.table || order.orderType === "Dine-in") {
+      await reconcileTables(auth.restaurantId);
+    }
+
+    if (isVoid) {
+      await applyRecipeStock(order, 1);
+      await notify({
+        restaurantId: auth.restaurantId,
+        title: `Bill Voided: #${order.billNo}`,
+        message: `Bill #${order.billNo} (₹${order.total.toFixed(2)}) was voided. Reason: ${data.reason}.`,
+        category: "Payments",
+        severity: "info",
+      });
     }
 
     if (isRefund) {
-      await reverseCustomerForRefund(order);
+      await reverseCustomerForRefund(order, refundAmount);
       await notify({
         restaurantId: auth.restaurantId,
         title: `Refund Processed: #${order.billNo}`,
-        message: `Refund of ₹${order.total.toFixed(2)} for bill #${order.billNo} has been recorded.`,
+        message: `${fullRefund ? "Full" : "Part"} refund of ₹${refundAmount.toFixed(2)} for bill #${order.billNo} via ${data.mode ?? order.mode}. Reason: ${data.reason}.`,
         category: "Payments",
         severity: "info",
       });

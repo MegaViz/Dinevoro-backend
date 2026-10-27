@@ -15,8 +15,8 @@ const accountingSettingsSchema = new Schema(
     integrations: {
       tally: { type: integrationStateSchema, default: () => ({ connected: false }) },
       quickbooks: { type: integrationStateSchema, default: () => ({ connected: false }) },
-      zoho: { type: integrationStateSchema, default: () => ({ connected: true }) },
-      bank: { type: integrationStateSchema, default: () => ({ connected: true }) },
+      zoho: { type: integrationStateSchema, default: () => ({ connected: false }) },
+      bank: { type: integrationStateSchema, default: () => ({ connected: false }) },
     },
   },
   { timestamps: true },

@@ -2,7 +2,7 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
-import { expenseUpdateSchema } from "@/lib/validation";
+import { onlyProvided, expenseUpdateSchema } from "@/lib/validation";
 import Expense from "@/models/Expense";
 import { serializeExpense, hasRealAttachment } from "@/lib/serialize-resources";
 
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
-    const update: Record<string, unknown> = { ...parsed.data };
+    const update: Record<string, unknown> = { ...onlyProvided(parsed.data, body) };
     if (parsed.data.createdAt) {
       update.createdAt = new Date(parsed.data.createdAt);
     }

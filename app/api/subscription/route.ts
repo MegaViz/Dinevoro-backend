@@ -6,6 +6,8 @@ import { subscriptionChangeSchema } from "@/lib/validation";
 import Restaurant, { type RestaurantDoc } from "@/models/Restaurant";
 import { serializeRestaurant } from "@/lib/serialize";
 import { notify } from "@/lib/notify";
+import { resolveSellablePlan } from "@/lib/plans";
+import { toPlatformPlan } from "@/lib/super-admin";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -28,14 +30,19 @@ export async function POST(request: Request) {
       return withCors(request, jsonResponse({ error: "Restaurant not found" }, 404));
     }
 
-    if (restaurant.plan === parsed.data.plan) {
+    const plan = await resolveSellablePlan(parsed.data.plan);
+    if ("error" in plan) {
+      return withCors(request, jsonResponse({ error: plan.error }, 409));
+    }
+
+    if (restaurant.plan === plan.name) {
       return withCors(request, jsonResponse({ restaurant: serializeRestaurant(restaurant) }));
     }
 
     const previousPlan = restaurant.plan;
     const updated = (await Restaurant.findByIdAndUpdate(
       auth.restaurantId,
-      { plan: parsed.data.plan },
+      { plan: plan.name },
       { new: true, runValidators: true },
     )) as RestaurantDoc | null;
 
@@ -45,8 +52,8 @@ export async function POST(request: Request) {
 
     await notify({
       restaurantId: auth.restaurantId,
-      title: `Plan changed to ${parsed.data.plan}`,
-      message: `Your subscription was updated from ${previousPlan} to ${parsed.data.plan}. Changes take effect immediately.`,
+      title: `Plan changed to ${plan.name}`,
+      message: `Your subscription was updated from ${toPlatformPlan(previousPlan ?? undefined)} to ${plan.name}. Changes take effect immediately.`,
       category: "System",
       severity: "success",
     });

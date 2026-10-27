@@ -1,3 +1,4 @@
+import { resolveSellablePlan, TRIAL_DAYS } from "@/lib/plans";
 import { jsonResponse } from "@/lib/response";
 import bcrypt from "bcryptjs";
 import { connectToDatabase } from "@/lib/mongodb";
@@ -49,8 +50,13 @@ export async function POST(request: Request) {
       return withCors(request, jsonResponse({ error: "An account with this email already exists" }, 409));
     }
 
+    const plan = await resolveSellablePlan(data.plan);
+    if ("error" in plan) {
+      return withCors(request, jsonResponse({ error: plan.error }, 400));
+    }
+
     const passwordHash = await bcrypt.hash(data.password, 10);
-    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 
     const user = (await User.create({
       fullName: data.fullName,
@@ -65,11 +71,12 @@ export async function POST(request: Request) {
       phone: data.phone,
       gstin: data.gstin,
       owner: user._id,
-      plan: data.plan,
+      plan: plan.name,
       billingCycle: data.billingCycle,
       trialEndsAt,
       ownerName: data.fullName,
       email: data.email,
+      termsAcceptedAt: new Date(),
     })) as unknown as RestaurantDoc;
 
     user.restaurant = restaurant._id;

@@ -8,6 +8,7 @@ import InventoryItem from "@/models/InventoryItem";
 import { serializeStockEntry } from "@/lib/serialize-resources";
 import { seedDefaultInventory } from "@/lib/seed-demo-data";
 import { checkLowStock } from "@/lib/inventory-alerts";
+import { convertQuantity } from "@/lib/stock";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -38,16 +39,36 @@ export async function POST(request: Request) {
     const data = parsed.data;
     await connectToDatabase();
 
-    const entry = await StockEntry.create({ ...data, restaurant: auth.restaurantId });
-
     const existing = await InventoryItem.findOne({
       restaurant: auth.restaurantId,
-      name: { $regex: `^${data.item}$`, $options: "i" },
+      name: { $regex: `^${data.item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    });
+
+    // Stock is always kept in the item's own unit: convert (e.g. 500 g into kg) or refuse.
+    let quantityInItemUnit = data.quantity;
+    if (existing) {
+      const converted = convertQuantity(data.quantity, data.unit, existing.unit);
+      if (converted === null) {
+        return withCors(
+          request,
+          jsonResponse({ error: `${existing.name} is stocked in ${existing.unit}; ${data.unit} cannot be converted to ${existing.unit}` }, 400),
+        );
+      }
+      quantityInItemUnit = Math.round(converted * 1000) / 1000;
+    } else if (data.reorderLevel === undefined) {
+      return withCors(request, jsonResponse({ error: "Set a reorder level for the new item" }, 400));
+    }
+
+    const entry = await StockEntry.create({
+      ...data,
+      item: existing?.name ?? data.item,
+      quantity: quantityInItemUnit,
+      unit: existing?.unit ?? data.unit,
+      restaurant: auth.restaurantId,
     });
 
     if (existing) {
-      existing.quantity += data.quantity;
-      existing.unit = data.unit;
+      existing.quantity = Math.round((existing.quantity + quantityInItemUnit) * 1000) / 1000;
       await existing.save();
       await checkLowStock(auth.restaurantId, existing);
     } else {
@@ -56,6 +77,7 @@ export async function POST(request: Request) {
         name: data.item,
         unit: data.unit,
         quantity: data.quantity,
+        reorderLevel: data.reorderLevel,
       });
       await checkLowStock(auth.restaurantId, created);
     }

@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       reportsSummary: {
         totalStaff: staff.length,
         presentToday: countAttendance(staff).present + countAttendance(staff).late,
-        presentDetail: `${staff.filter((s) => s.status === "Present").length} present · ${staff.filter((s) => s.status === "Late").length} late · ${staff.filter((s) => s.status === "Absent").length} absent`,
+        presentDetail: `${staff.filter((s) => s.status === "Present").length} present · ${staff.filter((s) => s.status === "Late").length} late · ${staff.filter((s) => s.status === "Absent").length} absent · ${staff.filter((s) => s.status === "Not Checked In").length} not checked in`,
         avgAttendance,
         lateThisWeek,
       },
@@ -67,7 +67,8 @@ export async function POST(request: Request) {
     const staff = await Staff.create({
       ...parsed.data,
       restaurant: auth.restaurantId,
-      status: parsed.data.shift === "Evening" ? "Off Duty" : "Absent",
+      // New staff have simply not checked in yet; they are not absent.
+      status: "Not Checked In",
     });
 
     await syncAttendanceDay(auth.restaurantId);

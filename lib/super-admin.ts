@@ -188,7 +188,7 @@ export async function registerFirstSuperAdmin(input: {
   return user;
 }
 
-const DEFAULT_PLANS = [
+export const DEFAULT_PLANS = [
   {
     slug: "basic",
     name: "Basic",
@@ -218,8 +218,6 @@ const DEFAULT_PLANS = [
       "Advanced Inventory",
       "Advanced Reports",
       "CRM + Loyalty",
-      "QR Ordering",
-      "Online Ordering",
       "Delivery Management",
     ],
     modules: PLAN_DEFAULT_MODULES.Classic,

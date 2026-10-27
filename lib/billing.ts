@@ -72,9 +72,13 @@ export async function nextInvoiceNumber(restaurantId: string) {
 }
 
 /** Amount actually received for an order (older paid orders have no amountPaid recorded). */
-export function amountReceived(order: { status: string; total: number; amountPaid?: number | null }) {
-  if (order.status === "Paid") return order.amountPaid && order.amountPaid > 0 ? order.amountPaid : order.total;
-  if (order.status === "Refunded") return 0;
+/** Money kept for an order: received minus anything refunded (older paid orders have no amountPaid recorded). */
+export function amountReceived(order: { status: string; total: number; amountPaid?: number | null; refundAmount?: number | null }) {
+  if (order.status === "Paid") {
+    const paid = order.amountPaid && order.amountPaid > 0 ? order.amountPaid : order.total;
+    return roundMoney(Math.max(0, paid - (order.refundAmount ?? 0)));
+  }
+  if (order.status === "Refunded" || order.status === "Void") return 0;
   return order.amountPaid ?? 0;
 }
 

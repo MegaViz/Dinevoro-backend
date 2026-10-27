@@ -6,6 +6,7 @@ import { recipeUpdateSchema } from "@/lib/validation";
 import Recipe from "@/models/Recipe";
 import MenuItem from "@/models/MenuItem";
 import { serializeRecipe } from "@/lib/serialize-resources";
+import { resolveIngredients } from "@/lib/recipe-ingredients";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -26,7 +27,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await connectToDatabase();
 
     const patch: Record<string, unknown> = {};
-    if (parsed.data.ingredients) patch.ingredients = parsed.data.ingredients;
+    if (parsed.data.ingredients) {
+      try {
+        patch.ingredients = await resolveIngredients(auth.restaurantId, parsed.data.ingredients);
+      } catch (e) {
+        return withCors(request, jsonResponse({ error: (e as Error).message }, 400));
+      }
+    }
 
     if (parsed.data.menuItemId) {
       const menuItem = await MenuItem.findOne({
@@ -35,6 +42,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       });
       if (!menuItem) {
         return withCors(request, jsonResponse({ error: "Select a menu item that exists on your menu" }, 400));
+      }
+      const duplicate = await Recipe.exists({ restaurant: auth.restaurantId, menuItem: menuItem._id, _id: { $ne: id } });
+      if (duplicate) {
+        return withCors(request, jsonResponse({ error: `${menuItem.name} already has a recipe` }, 409));
       }
       patch.menuItem = menuItem._id;
       patch.name = menuItem.name;

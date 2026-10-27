@@ -6,7 +6,7 @@ const inventoryItemSchema = new Schema(
     name: { type: String, required: true, trim: true },
     unit: { type: String, required: true },
     quantity: { type: Number, required: true, default: 0 },
-    reorderLevel: { type: Number, required: true, default: 10 },
+    reorderLevel: { type: Number, required: true, default: 0 },
   },
   { timestamps: true },
 );

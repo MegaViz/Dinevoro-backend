@@ -58,6 +58,12 @@ export async function POST(request: Request) {
           jsonResponse({ error: "Invalid email or password" }, 401),
         );
       }
+      if (user.active === false) {
+        return withCors(
+          request,
+          jsonResponse({ error: "This account has been switched off by the restaurant owner" }, 403),
+        );
+      }
       if (user.role === "Owner" && user.subscriptionEndsAt) {
         const now = dayjs();
         // Access is valid through the end of the subscription calendar day.

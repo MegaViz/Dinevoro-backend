@@ -5,6 +5,8 @@ import { withCors, corsPreflight } from "@/lib/cors";
 import { tableUpdateSchema } from "@/lib/validation";
 import Table from "@/models/Table";
 import { serializeTable } from "@/lib/serialize-resources";
+import { normalizeMobile } from "@/lib/customer-stats";
+import Order from "@/models/Order";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -23,6 +25,41 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     await connectToDatabase();
+    const current = await Table.findOne({ _id: id, restaurant: auth.restaurantId });
+    if (!current) {
+      return withCors(request, jsonResponse({ error: "Table not found" }, 404));
+    }
+    if (parsed.data.number && parsed.data.number.toLowerCase() !== current.number.toLowerCase()) {
+      const duplicate = await Table.exists({
+        restaurant: auth.restaurantId,
+        _id: { $ne: id },
+        number: { $regex: new RegExp(`^${parsed.data.number.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+      });
+      if (duplicate) {
+        return withCors(request, jsonResponse({ error: `Table ${parsed.data.number} already exists` }, 409));
+      }
+    }
+    if (parsed.data.status === "Reserved") {
+      if (current.status === "Occupied" || current.status === "Billing") {
+        return withCors(request, jsonResponse({ error: `Table ${current.number} is in use and cannot be reserved` }, 409));
+      }
+      if (!parsed.data.customerName) {
+        return withCors(request, jsonResponse({ error: "Enter the guest name for the reservation" }, 400));
+      }
+      const when = parsed.data.reservedAt ? new Date(parsed.data.reservedAt) : null;
+      if (!when || isNaN(when.getTime())) {
+        return withCors(request, jsonResponse({ error: "Choose a reservation date and time" }, 400));
+      }
+      if (when.getTime() < Date.now() - 5 * 60 * 1000) {
+        return withCors(request, jsonResponse({ error: "Reservation time must be in the future" }, 400));
+      }
+      const phone = normalizeMobile(parsed.data.customerPhone ?? "");
+      if (parsed.data.customerPhone && !phone) {
+        return withCors(request, jsonResponse({ error: "Enter a valid 10-digit mobile number" }, 400));
+      }
+      parsed.data.customerPhone = phone;
+      parsed.data.reservedAt = when.toISOString();
+    }
     const update = { ...parsed.data };
     if (parsed.data.status === "Occupied") {
       (update as Record<string, unknown>).occupiedAt = new Date();
@@ -30,6 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (parsed.data.status === "Available") {
       (update as Record<string, unknown>).customerName = "";
       (update as Record<string, unknown>).reservedAt = "";
+      (update as Record<string, unknown>).customerPhone = "";
       (update as Record<string, unknown>).occupiedAt = null;
       (update as Record<string, unknown>).currentOrder = null;
     }
@@ -52,7 +90,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const { id } = await params;
   await connectToDatabase();
-  await Table.findOneAndDelete({ _id: id, restaurant: auth.restaurantId });
+  const table = await Table.findOne({ _id: id, restaurant: auth.restaurantId });
+  if (!table) {
+    return withCors(request, jsonResponse({ error: "Table not found" }, 404));
+  }
+  const openBill = await Order.exists({ restaurant: auth.restaurantId, table: table._id, status: "Pending" });
+  if (openBill || table.status !== "Available") {
+    return withCors(request, jsonResponse({ error: `Table ${table.number} ${openBill ? "has an open bill" : `is ${table.status.toLowerCase()}`}; free it before deleting` }, 409));
+  }
+  await table.deleteOne();
 
   return withCors(request, jsonResponse({ ok: true }));
 }

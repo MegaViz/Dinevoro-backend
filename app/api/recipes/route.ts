@@ -7,6 +7,7 @@ import Recipe from "@/models/Recipe";
 import MenuItem from "@/models/MenuItem";
 import { serializeRecipe } from "@/lib/serialize-resources";
 import { seedDefaultRecipes } from "@/lib/seed-demo-data";
+import { resolveIngredients } from "@/lib/recipe-ingredients";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -58,13 +59,25 @@ export async function POST(request: Request) {
       return withCors(request, jsonResponse({ error: "Select a menu item that exists on your menu" }, 400));
     }
 
+    const duplicate = await Recipe.exists({ restaurant: auth.restaurantId, menuItem: menuItem._id });
+    if (duplicate) {
+      return withCors(request, jsonResponse({ error: `${menuItem.name} already has a recipe. Edit that recipe instead.` }, 409));
+    }
+
+    let ingredients;
+    try {
+      ingredients = await resolveIngredients(auth.restaurantId, parsed.data.ingredients);
+    } catch (e) {
+      return withCors(request, jsonResponse({ error: (e as Error).message }, 400));
+    }
+
     const recipe = await Recipe.create({
       restaurant: auth.restaurantId,
       menuItem: menuItem._id,
       name: menuItem.name,
       category: menuItem.category,
       salePrice: menuItem.price,
-      ingredients: parsed.data.ingredients,
+      ingredients,
     });
 
     return withCors(request, jsonResponse({ recipe: serializeRecipe(recipe) }, 201));

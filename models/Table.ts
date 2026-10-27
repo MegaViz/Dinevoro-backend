@@ -9,6 +9,7 @@ const tableSchema = new Schema(
     status: { type: String, enum: ["Available", "Occupied", "Reserved", "Billing"], default: "Available" },
     customerName: { type: String, default: "" },
     reservedAt: { type: String, default: "" },
+    customerPhone: { type: String, default: "" },
     occupiedAt: { type: Date },
     currentOrder: { type: Schema.Types.ObjectId, ref: "Order" },
   },

@@ -1,7 +1,7 @@
 import Order from "@/models/Order";
 import Restaurant from "@/models/Restaurant";
 import AccountingSettings from "@/models/AccountingSettings";
-import { roundMoney } from "@/lib/billing";
+import { amountReceived, roundMoney } from "@/lib/billing";
 import { addMonths, endOfMonth, RESTAURANT_TIME_ZONE } from "@/lib/dates";
 
 /** "Oct 2026" — also the key stored in AccountingSettings.filedGstPeriods. */
@@ -56,18 +56,21 @@ export async function buildGstPeriods(restaurantId: string, months = 4, now = ne
     const start = addMonths(now, -i);
     return { start, end: endOfMonth(start), label: monthLabel(start), isCurrent: i === 0 };
   });
+  // Same basis as the P&L: money actually received (paid bills, part payments, less refunds).
   const orders = await Order.find({
     restaurant: restaurantId,
-    status: "Paid",
+    status: { $in: ["Paid", "Pending"] },
     createdAt: { $gte: ranges[ranges.length - 1].start, $lte: ranges[0].end },
-  }).select("createdAt total subtotal gstAmount");
+  }).select("createdAt status total subtotal gstAmount amountPaid refundAmount");
 
   const filed = new Set<string>(settings.filedGstPeriods ?? []);
   const periods: GstPeriod[] = ranges.map(({ start, end, label, isCurrent }) => {
     const inMonth = orders.filter((o) => o.createdAt >= start && o.createdAt <= end);
-    const totalSales = roundMoney(inMonth.reduce((s, o) => s + o.total, 0));
-    const taxable = roundMoney(inMonth.reduce((s, o) => s + o.subtotal, 0));
-    const totalGst = roundMoney(inMonth.reduce((s, o) => s + o.gstAmount, 0));
+    // A part-paid or part-refunded bill counts in proportion to the money kept.
+    const share = (o: (typeof inMonth)[number]) => (o.total > 0 ? amountReceived(o) / o.total : 0);
+    const totalSales = roundMoney(inMonth.reduce((s, o) => s + amountReceived(o), 0));
+    const totalGst = roundMoney(inMonth.reduce((s, o) => s + o.gstAmount * share(o), 0));
+    const taxable = roundMoney(totalSales - totalGst);
     const cgst = roundMoney(totalGst * cgstShare);
     const sgst = roundMoney(totalGst - cgst);
     // Returns are due on the 20th of the following month.

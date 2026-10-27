@@ -7,9 +7,11 @@ const staffSchema = new Schema(
     role: { type: String, required: true, trim: true },
     phone: { type: String, trim: true, default: "" },
     shift: { type: String, enum: ["Morning", "Evening"], default: "Morning" },
-    status: { type: String, enum: ["Present", "Late", "Absent", "Off Duty"], default: "Absent" },
+    status: { type: String, enum: ["Present", "Late", "Absent", "Off Duty", "Not Checked In"], default: "Not Checked In" },
     checkIn: { type: String, trim: true, default: "" },
     checkOut: { type: String, trim: true, default: "" },
+    /** Restaurant-local date (YYYY-MM-DD) of the latest check-in. */
+    attendanceDate: { type: String, default: "" },
     active: { type: Boolean, default: true },
   },
   { timestamps: true },

@@ -1,3 +1,4 @@
+import { isDemoRestaurant } from "@/lib/demo-restaurant";
 import Order from "@/models/Order";
 import Table from "@/models/Table";
 import { seedDefaultTables } from "@/lib/seed-tables";
@@ -8,6 +9,7 @@ async function nextBillNo(restaurantId: string) {
 }
 
 export async function seedKitchenOrders(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const existing = await Order.countDocuments({
     restaurant: restaurantId,
     kitchenStatus: { $in: ["New", "Preparing", "Ready"] },

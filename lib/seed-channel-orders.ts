@@ -1,3 +1,4 @@
+import { isDemoRestaurant } from "@/lib/demo-restaurant";
 import Order from "@/models/Order";
 import DeliveryAgent from "@/models/DeliveryAgent";
 import Table from "@/models/Table";
@@ -11,6 +12,7 @@ const DEFAULT_AGENTS = [
 ];
 
 export async function seedDefaultAgents(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const existing = await DeliveryAgent.countDocuments({ restaurant: restaurantId });
   if (existing > 0) return;
   await DeliveryAgent.insertMany(DEFAULT_AGENTS.map((a) => ({ ...a, restaurant: restaurantId })));
@@ -22,6 +24,7 @@ async function nextBillNo(restaurantId: string) {
 }
 
 export async function seedDemoChannelOrders(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   await seedDefaultAgents(restaurantId);
 
   const qrCount = await Order.countDocuments({ restaurant: restaurantId, channel: "QR" });

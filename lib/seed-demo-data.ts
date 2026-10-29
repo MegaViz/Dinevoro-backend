@@ -1,3 +1,4 @@
+import { isDemoRestaurant } from "@/lib/demo-restaurant";
 import MenuItem from "@/models/MenuItem";
 import InventoryItem from "@/models/InventoryItem";
 import StockEntry from "@/models/StockEntry";
@@ -150,6 +151,7 @@ const DEFAULT_NOTIFICATIONS = [
 ];
 
 export async function seedDefaultStaff(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await Staff.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
   await Staff.insertMany(DEFAULT_STAFF.map((s) => ({ ...s, restaurant: restaurantId })));
@@ -169,6 +171,7 @@ export async function seedDefaultStaff(restaurantId: string) {
 }
 
 export async function seedDefaultNotifications(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await Notification.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
   await Notification.insertMany(
@@ -178,6 +181,7 @@ export async function seedDefaultNotifications(restaurantId: string) {
 }
 
 export async function seedDefaultExpenses(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const insertDemo = () =>
     Expense.insertMany(
       // Sample expenses have no receipt file, so they are not marked as attached.
@@ -202,12 +206,14 @@ export async function seedDefaultExpenses(restaurantId: string) {
 }
 
 export async function seedDefaultMenuItems(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await MenuItem.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
   await MenuItem.insertMany(DEFAULT_MENU.map((item) => ({ ...item, restaurant: restaurantId })));
 }
 
 export async function seedDefaultInventory(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await InventoryItem.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
   await InventoryItem.insertMany(DEFAULT_INVENTORY.map((item) => ({ ...item, restaurant: restaurantId })));
@@ -225,12 +231,14 @@ export async function seedDefaultInventory(restaurantId: string) {
 }
 
 export async function seedDefaultCustomers(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await Customer.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
   await Customer.insertMany(DEFAULT_CUSTOMERS.map((c) => ({ ...c, restaurant: restaurantId })));
 }
 
 export async function seedDefaultRecipes(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const count = await Recipe.countDocuments({ restaurant: restaurantId });
   if (count > 0) return;
 

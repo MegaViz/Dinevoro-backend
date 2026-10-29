@@ -32,13 +32,24 @@ export function verifyToken(token: string): AuthTokenPayload | null {
 export function readAuthToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
-  if (match?.[1]) return match[1].trim();
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(match[1].trim());
+    } catch {
+      return match[1].trim();
+    }
+  }
 
   const cookieHeader = request.headers.get("cookie") ?? "";
-  const token = cookieHeader
+  const raw = cookieHeader
     .split(";")
     .map((c) => c.trim())
     .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
-    ?.split("=")[1];
-  return token || null;
+    ?.slice(JWT_COOKIE_NAME.length + 1);
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }

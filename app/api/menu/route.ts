@@ -3,9 +3,12 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { menuItemSchema, MENU_CATEGORIES } from "@/lib/validation";
-import MenuItem from "@/models/MenuItem";
+import MenuItemImport from "@/models/MenuItem";
+import { resolveModel } from "@/lib/resolve-model";
 import { serializeMenuItem } from "@/lib/serialize-resources";
 import { seedDefaultMenuItems } from "@/lib/seed-demo-data";
+
+const MenuItem = resolveModel(MenuItemImport);
 
 /** Standard menu sections, plus any section this restaurant already uses. */
 export async function isKnownCategory(restaurantId: string, category: string) {
@@ -56,6 +59,13 @@ export async function POST(request: Request) {
     return withCors(request, jsonResponse({ item: serializeMenuItem(item) }, 201));
   } catch (err) {
     console.error("Create menu item error:", err);
+    const mongo = err as { code?: number; name?: string; message?: string };
+    if (mongo?.code === 11000) {
+      return withCors(request, jsonResponse({ error: "A menu item with this name already exists" }, 400));
+    }
+    if (mongo?.name === "ValidationError") {
+      return withCors(request, jsonResponse({ error: mongo.message || "Invalid menu item" }, 400));
+    }
     return withCors(request, jsonResponse({ error: "Something went wrong" }, 500));
   }
 }

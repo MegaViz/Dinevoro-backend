@@ -4,8 +4,11 @@ import { getAuthContext, unauthorized } from "@/lib/auth-context";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { menuItemUpdateSchema, MENU_CATEGORIES } from "@/lib/validation";
 import { isKnownCategory } from "@/app/api/menu/route";
-import MenuItem from "@/models/MenuItem";
+import MenuItemImport from "@/models/MenuItem";
+import { resolveModel } from "@/lib/resolve-model";
 import { serializeMenuItem } from "@/lib/serialize-resources";
+
+const MenuItem = resolveModel(MenuItemImport);
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);

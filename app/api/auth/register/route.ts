@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       trialEndsAt,
       ownerName: data.fullName,
       email: data.email,
-      termsAcceptedAt: new Date(),
+      termsAcceptedAt: data.acceptTerms ? new Date() : undefined,
     })) as unknown as RestaurantDoc;
 
     user.restaurant = restaurant._id;

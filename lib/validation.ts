@@ -66,7 +66,8 @@ export const registerSchema = z.object({
     .default(""),
   plan: z.enum(["Basic", "Standard", "Premium", "Classic", "Advanced"]).default("Classic"),
   billingCycle: z.enum(["Monthly", "Annual"]).default("Monthly"),
-  acceptTerms: z.literal(true, { error: "Accept the Terms of Service and Privacy Policy to create an account" }),
+  // Optional: signup never fails over terms. When the site sends true, the acceptance time is recorded.
+  acceptTerms: z.boolean().optional(),
 });
 
 export const SubscriptionSchema = z.object({

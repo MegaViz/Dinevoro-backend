@@ -66,12 +66,8 @@ export const registerSchema = z.object({
     .default(""),
   plan: z.enum(["Basic", "Standard", "Premium", "Classic", "Advanced"]).default("Classic"),
   billingCycle: z.enum(["Monthly", "Annual"]).default("Monthly"),
-  // The website signup sends acceptTerms: true once the checkbox is ticked. Older cached copies of the
-  // site have no checkbox and omit the field, so only an explicit "false" is rejected.
-  acceptTerms: z
-    .boolean()
-    .optional()
-    .refine((v) => v !== false, { message: "Accept the Terms of Service and Privacy Policy to create an account" }),
+  // Optional: signup never fails over terms. When the site sends true, the acceptance time is recorded.
+  acceptTerms: z.boolean().optional(),
 });
 
 export const SubscriptionSchema = z.object({

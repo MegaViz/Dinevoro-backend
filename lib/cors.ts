@@ -2,9 +2,11 @@ import { emptyResponse } from "@/lib/response";
 
 const DEFAULT_ORIGINS = [
   "http://localhost:5173",
+  "http://127.0.0.1:5173",
   "https://dinevoro.com",
   "https://www.dinevoro.com",
   "https://dinevoro.vercel.app",
+  "https://dinevoro-frontend.vercel.app",
   "https://dinevoro-tau.vercel.app",
   "https://hotel-management-six-lime.vercel.app",
 ];
@@ -26,12 +28,15 @@ function allowedOrigins() {
 export function corsHeaders(origin: string | null) {
   const normalizedOrigin = origin ? normalizeOrigin(origin) : null;
   const allowed = allowedOrigins();
-  const allowOrigin =
-    normalizedOrigin && allowed.includes(normalizedOrigin)
-      ? normalizedOrigin
-      : normalizedOrigin && process.env.NODE_ENV !== "production"
-        ? normalizedOrigin
-        : allowed.find((entry) => entry.startsWith("https://")) ?? allowed[0];
+
+  // Only echo the request Origin when it is allowlisted. Never fall back to a
+  // different site (e.g. dinevoro.com) — browsers treat that as a CORS failure.
+  let allowOrigin: string | undefined;
+  if (normalizedOrigin && allowed.includes(normalizedOrigin)) {
+    allowOrigin = normalizedOrigin;
+  } else if (normalizedOrigin && process.env.NODE_ENV !== "production") {
+    allowOrigin = normalizedOrigin;
+  }
 
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",

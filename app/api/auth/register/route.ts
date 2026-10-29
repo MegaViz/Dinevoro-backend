@@ -13,18 +13,6 @@ import { signToken, JWT_COOKIE_NAME } from "@/lib/jwt";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { authCookieOptions } from "@/lib/auth-cookie";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
-import { seedDefaultTables } from "@/lib/seed-tables";
-import { seedDefaultAgents, seedDemoChannelOrders } from "@/lib/seed-channel-orders";
-import { seedKitchenOrders } from "@/lib/seed-kitchen-orders";
-import {
-  seedDefaultMenuItems,
-  seedDefaultInventory,
-  seedDefaultCustomers,
-  seedDefaultRecipes,
-  seedDefaultExpenses,
-  seedDefaultStaff,
-  seedDefaultNotifications,
-} from "@/lib/seed-demo-data";
 
 export async function OPTIONS(request: Request) {
   return corsPreflight(request);
@@ -81,17 +69,7 @@ export async function POST(request: Request) {
 
     user.restaurant = restaurant._id;
     await User.findByIdAndUpdate(user._id, { restaurant: restaurant._id });
-    await seedDefaultTables(restaurant._id.toString());
-    await seedDefaultAgents(restaurant._id.toString());
-    await seedDefaultMenuItems(restaurant._id.toString());
-    await seedDefaultInventory(restaurant._id.toString());
-    await seedDefaultCustomers(restaurant._id.toString());
-    await seedDefaultRecipes(restaurant._id.toString());
-    await seedDefaultExpenses(restaurant._id.toString());
-    await seedDefaultStaff(restaurant._id.toString());
-    await seedDefaultNotifications(restaurant._id.toString());
-    await seedDemoChannelOrders(restaurant._id.toString());
-    await seedKitchenOrders(restaurant._id.toString());
+    // New restaurants start empty: no sample menu, customers, orders or staff from the demo account.
 
     const token = signToken({ userId: user._id.toString(), restaurantId: restaurant._id.toString() });
 

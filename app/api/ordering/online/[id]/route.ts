@@ -56,8 +56,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (parsed.data.deliveryAgentId) {
-      update.deliveryAgent = parsed.data.deliveryAgentId;
-      await DeliveryAgent.findByIdAndUpdate(parsed.data.deliveryAgentId, { $inc: { todayRuns: 1 } });
+      const agent = await DeliveryAgent.findOne({ _id: parsed.data.deliveryAgentId, restaurant: auth.restaurantId });
+      if (!agent) {
+        return withCors(request, jsonResponse({ error: "Delivery agent not found" }, 404));
+      }
+      update.deliveryAgent = agent._id;
+      await DeliveryAgent.findByIdAndUpdate(agent._id, { $inc: { todayRuns: 1 } });
     }
 
     const order = await Order.findOneAndUpdate(

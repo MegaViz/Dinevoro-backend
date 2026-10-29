@@ -5,6 +5,7 @@ import { resolveModel } from "@/lib/resolve-model";
 
 const User = resolveModel(UserImport);
 const Restaurant = resolveModel(RestaurantImport);
+import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/demo-restaurant";
 import { seedDefaultTables } from "@/lib/seed-tables";
 import { seedDefaultAgents, seedDemoChannelOrders } from "@/lib/seed-channel-orders";
 import { seedKitchenOrders } from "@/lib/seed-kitchen-orders";
@@ -18,8 +19,7 @@ import {
   seedDefaultNotifications,
 } from "@/lib/seed-demo-data";
 
-export const DEMO_EMAIL = "arjun@spicegarden.com";
-export const DEMO_PASSWORD = "Demo@1234";
+export { DEMO_EMAIL, DEMO_PASSWORD };
 
 /** Ensures the Spice Garden demo owner exists and returns it. */
 export async function ensureDemoAccount(): Promise<{ user: UserDoc; restaurant: RestaurantDoc }> {

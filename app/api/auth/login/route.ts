@@ -11,7 +11,7 @@ import { signToken, JWT_COOKIE_NAME } from "@/lib/jwt";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { authCookieOptions } from "@/lib/auth-cookie";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
-import { ensureDemoAccount } from "@/lib/ensure-demo-account";
+import { ensureDemoAccount, DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/ensure-demo-account";
 import { z } from "zod";
 import dayjs from "dayjs";
 const loginSchema = z.object({
@@ -135,7 +135,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Demo fallback: unknown restaurant credentials open the Spice Garden demo account.
+    // Only the published demo credentials may open (and recreate) the Spice Garden demo account.
+    // Any other unknown email is rejected, so nobody lands in another restaurant's data.
+    if (email !== DEMO_EMAIL || password !== DEMO_PASSWORD) {
+      return withCors(
+        request,
+        jsonResponse({ error: "Invalid email or password" }, 401),
+      );
+    }
     const demo = await ensureDemoAccount();
     const token = signToken({
       userId: demo.user._id.toString(),

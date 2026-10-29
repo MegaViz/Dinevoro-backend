@@ -1,3 +1,4 @@
+import { isDemoRestaurant } from "@/lib/demo-restaurant";
 import Table from "@/models/Table";
 
 const DEFAULT_TABLES = [
@@ -16,6 +17,7 @@ const DEFAULT_TABLES = [
 ];
 
 export async function seedDefaultTables(restaurantId: string) {
+  if (!(await isDemoRestaurant(restaurantId))) return;
   const existing = await Table.countDocuments({ restaurant: restaurantId });
   if (existing > 0) return;
 

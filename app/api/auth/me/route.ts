@@ -2,7 +2,7 @@ import { jsonResponse } from "@/lib/response";
 import { connectToDatabase } from "@/lib/mongodb";
 import User, { type UserDoc } from "@/models/User";
 import Restaurant, { type RestaurantDoc } from "@/models/Restaurant";
-import { verifyToken, readAuthToken } from "@/lib/jwt";
+import { verifyToken, readBearerToken, readCookieToken } from "@/lib/jwt";
 import { withCors, corsPreflight } from "@/lib/cors";
 import { serializeUser, serializeRestaurant } from "@/lib/serialize";
 
@@ -12,15 +12,20 @@ export async function OPTIONS(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const token = readAuthToken(request);
-
-    if (!token) {
-      return withCors(request, jsonResponse({ error: "Not authenticated" }, 401));
+    let token: string | null = null;
+    let payload: ReturnType<typeof verifyToken> = null;
+    for (const candidate of [readBearerToken(request), readCookieToken(request)]) {
+      if (!candidate) continue;
+      const next = verifyToken(candidate);
+      if (next) {
+        token = candidate;
+        payload = next;
+        break;
+      }
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      return withCors(request, jsonResponse({ error: "Session expired" }, 401));
+    if (!token || !payload) {
+      return withCors(request, jsonResponse({ error: "Not authenticated" }, 401));
     }
 
     await connectToDatabase();
@@ -36,6 +41,8 @@ export async function GET(request: Request) {
       jsonResponse({
         user: serializeUser(user),
         restaurant: restaurant ? serializeRestaurant(restaurant) : null,
+        // Let the SPA refresh localStorage after reload when only the cookie survived.
+        token,
       }),
     );
   } catch (err) {

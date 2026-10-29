@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { connectToDatabase } from "@/lib/mongodb";
-import { verifyToken, readAuthToken } from "@/lib/jwt";
+import { verifyToken, readBearerToken, readCookieToken } from "@/lib/jwt";
 import { withCors } from "@/lib/cors";
 import { jsonResponse } from "@/lib/response";
 import User, { type UserDoc } from "@/models/User";
@@ -127,10 +127,15 @@ export function serializePlan(plan: PlatformPlanDoc, tenantCount: number) {
 }
 
 export async function getPlatformAdmin(request: Request) {
-  const token = readAuthToken(request);
-
-  if (!token) return null;
-  const payload = verifyToken(token);
+  let payload: ReturnType<typeof verifyToken> = null;
+  for (const candidate of [readBearerToken(request), readCookieToken(request)]) {
+    if (!candidate) continue;
+    const next = verifyToken(candidate);
+    if (next?.userId) {
+      payload = next;
+      break;
+    }
+  }
   if (!payload?.userId) return null;
 
   await connectToDatabase();

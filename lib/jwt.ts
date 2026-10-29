@@ -25,31 +25,36 @@ export function verifyToken(token: string): AuthTokenPayload | null {
   }
 }
 
-/**
- * Reads the session token from the `Authorization: Bearer` header, falling back to the auth cookie.
- * The frontend calls the API on another domain, where browsers often drop the cookie, so the header comes first.
- */
-export function readAuthToken(request: Request): string | null {
+function decodeTokenValue(raw: string): string {
+  try {
+    return decodeURIComponent(raw.trim());
+  } catch {
+    return raw.trim();
+  }
+}
+
+/** Session from `Authorization: Bearer …` (cross-origin SPA / localStorage). */
+export function readBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(match[1].trim());
-    } catch {
-      return match[1].trim();
-    }
-  }
+  return match?.[1] ? decodeTokenValue(match[1]) : null;
+}
 
+/** Session from the HttpOnly auth cookie. */
+export function readCookieToken(request: Request): string | null {
   const cookieHeader = request.headers.get("cookie") ?? "";
   const raw = cookieHeader
     .split(";")
     .map((c) => c.trim())
     .find((c) => c.startsWith(`${JWT_COOKIE_NAME}=`))
     ?.slice(JWT_COOKIE_NAME.length + 1);
-  if (!raw) return null;
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
+  return raw ? decodeTokenValue(raw) : null;
+}
+
+/**
+ * Reads the session token from the `Authorization: Bearer` header, falling back to the auth cookie.
+ * Prefer getAuthContext, which verifies each source so a stale Bearer cannot mask a valid cookie.
+ */
+export function readAuthToken(request: Request): string | null {
+  return readBearerToken(request) || readCookieToken(request);
 }

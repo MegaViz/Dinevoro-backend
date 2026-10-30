@@ -8,9 +8,7 @@ import "dotenv/config";
 import { config } from "dotenv";
 import { resolve } from "path";
 config({ path: resolve(process.cwd(), ".env.local") });
-
 import { registerFirstSuperAdmin, countSuperAdmins } from "../lib/super-admin";
-
 async function main() {
   const email = process.env.SUPER_ADMIN_EMAIL?.trim();
   const password = process.env.SUPER_ADMIN_PASSWORD?.trim();

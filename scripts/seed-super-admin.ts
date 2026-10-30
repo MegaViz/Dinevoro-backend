@@ -13,7 +13,6 @@ async function main() {
   const email = process.env.SUPER_ADMIN_EMAIL?.trim();
   const password = process.env.SUPER_ADMIN_PASSWORD?.trim();
   const fullName = process.env.SUPER_ADMIN_NAME?.trim() || "Super Admin";
-
   if (!email || !password) {
     console.error("Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD env vars.");
     process.exit(1);
